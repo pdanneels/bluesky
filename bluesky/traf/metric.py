@@ -2,7 +2,8 @@ import os
 from time import time,gmtime,strftime
 import numpy as np
 import matplotlib.pyplot as plt
-from math import degrees
+from math import degrees,sqrt
+from mpl_toolkits.mplot3d import Axes3D
 import collections
 from collections import defaultdict
 import itertools as IT
@@ -1019,7 +1020,7 @@ class metric_HB():
             f.writerow(row)
         return
 
-    def complexity_plot(self):
+    def plot(self):
         if self.step == 0:
             self.plot_complexity,= plt.plot([], [])
             self.plot_complexity2, = plt.plot([],[])
@@ -1304,8 +1305,73 @@ class metric_HB():
 
         self.complexity_plot()
         return
-
-
+        
+class metric_TD():
+    
+    def __init__(self):
+        self.simtime = 0.
+        self.avgrV = 0.
+        self.nac = 0
+        self.noc = 0   
+                
+        self.distlist = []
+        self.dvlist = []
+        self.timelist = []
+        
+    def calcResults(self, sim): # perform calculations on current traffic situation
+        if sim.traf.ntraf > 0:
+            Vx = sim.traf.gs*np.cos(sim.traf.ahdg*np.pi/180)
+            Vy = sim.traf.gs*np.sin(sim.traf.ahdg*np.pi/180)
+            dV = np.triu(np.sqrt(np.square(np.subtract.outer(Vx, Vx)) + np.square(np.subtract.outer(Vy, Vy)) + np.square(np.subtract.outer(sim.traf.vs, sim.traf.vs))))
+            iu = np.triu_indices(sqrt(dV.size),1) # TODO: ELiminate this sqrt, cpu intensive
+            avgdV = np.mean(dV[iu])
+                    
+            n = len(sim.traf.lat)
+            dist = np.zeros((n,n))            
+            for i in range(n):   
+                for j in range(n):
+                    dist[i][j] = latlondist(sim.traf.lat[i], sim.traf.lon[i], sim.traf.lat[j], sim.traf.lon[j])
+            return dV, avgdV, dist
+        return 0, 0, 0
+    
+    def update(self, sim): # update results in list for current timestep
+        dV, avgrV, dist = self.calcResults(sim)
+        self.simtime = np.append(self.simtime, sim.simt)
+        self.dvlist.append(dV) # list of matrixes containing relative velocities
+        self.distlist.append(dist) # list of matrixes containing relative distances
+        self.nac = np.append(self.nac, sim.traf.ntraf) 
+        self.noc = np.append(self.noc, np.sum(sim.traf.inconflict)/2)
+        self.avgrV = np.append(self.avgrV, avgrV)
+        return
+    
+    def plot(self):
+#        fig = plt.figure()
+        
+        iu = np.triu_indices(sqrt(self.dvlist[-1].size),1)
+        
+        # 2D:
+        plt.clf()
+        plt.hist(self.dvlist[-1][iu],bins=50)        
+        plt.draw()
+        
+        # 2D live:
+        
+        
+#        # 3D:
+#        ax = fig.add_subplot(111, projection='3d')
+#        for i in range(len(self.dvlist)):
+#            if len(self.dvlist) < 20:
+#                currentlistelement = self.dvlist[i]
+#                histarr,bins,_ = plt.hist(currentlistelement[iu],bins=50)
+#                ax.bar(histarr, histarr, i, zdir='y')            
+#        
+#        ax.set_xlabel("Relative velocity")
+#        ax.set_ylabel("Time")
+#        ax_set_zlabel("Frequency")
+#        plt.show()
+        
+        
+        
 class Metric():
     """ 
     Metric class definition : traffic metrics
@@ -1336,7 +1402,7 @@ class Metric():
         # Set time interval in seconds
         self.dt = 1  # [seconds]
         
-        self.name = ("CoCa-Metric","HB-Metric","Delete AC")
+        self.name = ("CoCa-Metric","HB-Metric","TD-Metric","Delete AC")
         self.metric_number = -1
         self.fir_circle_point = 0
         self.fir_circle_radius = 0
@@ -1349,7 +1415,7 @@ class Metric():
         self.cells = self.metric_Area.makeRegions()
         
         self.cellarea = self.metric_Area.cellArea()
-        self.metric = (metric_CoCa(self.metric_Area),metric_HB(self.cellarea))
+        self.metric = (metric_CoCa(self.metric_Area),metric_HB(self.cellarea),metric_TD())
 
         return
 
@@ -1383,10 +1449,12 @@ class Metric():
         if sim.simt >= 0:
             if self.metric_number == 0:
                 self.metric[self.metric_number].AircraftCell(sim.traf,self.cells,sim.t-self.tbegin,sim)
+                print "Number of Aircraft in Research Area (FIR):" + str(self.metric[self.metric_number].ntraf)
             elif self.metric_number == 1:
                 self.metric[self.metric_number].applymetric(sim)
-            
-        print "Number of Aircraft in Research Area (FIR):" + str(self.metric[self.metric_number].ntraf)
+                print "Number of Aircraft in Research Area (FIR):" + str(self.metric[self.metric_number].ntraf)
+            elif self.metric_number == 2:
+                self.metric[self.metric_number].update(sim)   
         
         deleteAC = []
         for i in range(0,sim.traf.ntraf):
@@ -1406,13 +1474,16 @@ class Metric():
         self.write(sim.simt,"NTRAF;"+str(sim.traf.ntraf))
         return
     
-    def plot(self):
+    def plot(self,sim):
+        #check if configured and there is actual traffic
+        if self.metric_number == -1 or sim.traf.ntraf < 1:
+            return        
         # Pause simulation
         sim.pause()
         
-        # Open a plot window attached to a command?
-        #    plot, showplot and other matplotlib commands
-
+        if self.metric_number > 0: #no plot for CoCa metric
+            self.metric[self.metric_number].plot()
+            
         # Continue simulation
         sim.start()
         return      
