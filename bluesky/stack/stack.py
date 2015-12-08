@@ -956,7 +956,7 @@ class Commandstack:
                         else:
                             if sim.metric.metric_number < 0:
                                 scr.echo("No metric active, to configure run:")
-                                scr.echo("METRICS OFF/0/1/2 [dt]")
+                                scr.echo("METRICS OFF/0/1/2/3 [dt]")
                             else:
                                 scr.echo("")
                                 scr.echo("Active: " + "(" + str(sim.metric.metric_number + 1) + ") " + sim.metric.name[
@@ -978,7 +978,17 @@ class Commandstack:
                         sim.metric.metric_number = int(cmdargs[1]) - 1
                         if sim.metric.metric_number < 0:
                             scr.echo("Metric is off")
-                        elif sim.metric.metric_number <= len(sim.metric.name):
+                        elif sim.metric.metric_number == 2:
+                            try:
+                                metric_dt = float(cmdargs[2])
+                                if metric_dt > 0:
+                                    sim.metric.dt = metric_dt
+                                    scr.echo("with dt = " + str(metric_dt))
+                                else:
+                                    scr.echo("No valid dt")
+                            except:
+                                scr.echo("with dt = " + str(sim.metric.dt))
+                        elif 0 <= sim.metric.metric_number < 2 :
                             if traf.area == "Circle":
                                 scr.echo("(" + str(sim.metric.metric_number + 1) + ") " + sim.metric.name[
                                     sim.metric.metric_number] + " activated")
