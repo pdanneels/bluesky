@@ -102,6 +102,7 @@ class Simulation:
             # Update metrics, check if metrics instance is present
             if self.metric is not None:
                 self.metric.update(self)
+                self.metric.plot(self)
 
         # HOLD/Pause mode
         else:
