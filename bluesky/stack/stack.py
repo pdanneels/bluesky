@@ -80,6 +80,11 @@ class Commandstack:
                 "acid,float",
                 traf.selhdg
             ],
+            "LOG": [
+                "LOG acid/area/*,dt",
+                "txt,float",
+                sim.datalog.start
+            ],
             "PCALL": [
                 "PCALL filename [REL/ABS]",
                 "txt,txt",
@@ -158,8 +163,7 @@ class Commandstack:
 
         self.extracmdmodules = {
             "SYN_": 'synthetic', 
-            "ASA_":'asascmd', 
-            "LOG_":'log'
+            "ASA_":'asascmd'
         }
 
         # Import modules from the list
