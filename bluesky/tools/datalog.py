@@ -30,10 +30,16 @@ class Datalog():
         # Create a buffer and save filename
         self.fname = os.path.dirname(__file__) + "/../../data/output/" \
             + strftime("%Y-%m-%d-%H-%M-%S-BlueSky.txt", gmtime())
-        self.buffer = ["time;acid;gs;vs;track;lat;long\n"]  # Log data
+        self.fnamem1 = os.path.dirname(__file__) + "/../../data/output/" \
+            + strftime("%Y-%m-%d-%H-%M-%S-BlueSky-metrics1.txt", gmtime())
+        self.fnamem2 = os.path.dirname(__file__) + "/../../data/output/" \
+            + strftime("%Y-%m-%d-%H-%M-%S-BlueSky-metrics2.txt", gmtime())
+        self.buffer = ["time;acid;gs;vs;track;lat;long\n"]        # Log data
+        self.m1buffer = ["time;metric;value\n"]   
         self.aclist = np.zeros(1)                                 # AC list to log
         self.dt = 1.                                              # Default logging interval
-        self.t0 = -9999                                           # Timer
+        self.t0 = -9999                                           # Timers
+        self.t1 = -9999
         self.swlog = False                                        # Logging started
         return
 
@@ -76,10 +82,9 @@ class Datalog():
             for i in self.aclist:
                 self.writebuffer(t, self.aclist[i])
         return
-
+        
     def writebuffer(self, t, idx):
         traf = self.sim.traf
-        metrics = self.sim.metrics
         self.buffer.append(t + ";" +
                            str(traf.id[idx]) + ";" +
                            str(traf.gs[idx]) + ";" +
@@ -88,9 +93,33 @@ class Datalog():
                            str(traf.lat[idx]) + ";" +
                            str(traf.lon[idx]) + "\n")
         return
-
+    
+    ############################
+    #   General save funtion   #
+    ############################
     def save(self):  # Write buffer to file
-        f = open(self.fname, "w")
-        f.writelines(self.buffer)
+        if self.swlog:                  # save log if logging enabled
+            f = open(self.fname, "w")
+            f.writelines(self.buffer)
+            f.close()
+        self.savem1()                   # save metrics log 1
+        return
+        
+    ###############
+    #   METRICS   #
+    ###############
+    def updatem1(self, var, val):
+        sim = self.sim
+        t = tim2txt(sim.simt)                   # Nicely formated time
+        self.writem1(t, var, val)
+        return
+    
+    def writem1(self,t,var,val):
+        self.m1buffer.append(t + ";" + var + ";" + val + "\n")
+        return
+
+    def savem1(self):  # Write buffer to file
+        f = open(self.fnamem1, "w")
+        f.writelines(self.m1buffer)
         f.close()
         return
