@@ -2,7 +2,7 @@ import time
 from ...tools.datalog import Datalog
 from ...traf import Traffic
 from ...stack import Commandstack
-from ...traf.metric import Metric
+from ...traf.metric2 import Metrics
 
 from ...tools.network import StackTelnetServer
 from ... import settings
@@ -52,7 +52,7 @@ class Simulation:
         # Simulation objects
         self.traf  = Traffic(navdb)
         self.navdb = navdb
-        self.metric = Metric()
+        self.metrics = Metrics(self)
 
         # Stack ties it together
         self.stack = Commandstack(self, self.traf, gui.scr)
@@ -110,13 +110,13 @@ class Simulation:
         if self.mode == Simulation.op:
             self.traf.update(self.simt, self.dt)
 
-            # Update metrics, check if metrics instance is present
-            if self.metric is not None:
-                self.metric.update(self)
+            # Update metrics
+            if self.metrics is not None:
+                self.metrics.update()
             
             # Update log
             if self.datalog is not None:
-                self.datalog.update(self)
+                self.datalog.update()
 
         # HOLD/Pause mode
         else:

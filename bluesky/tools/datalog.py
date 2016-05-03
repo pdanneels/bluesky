@@ -38,14 +38,15 @@ class Datalog():
         return
 
     def start(self, acbatch, dt):
-        if len(self.sim.traf.id) == 0:
+        traf = self.sim.traf
+        if len(traf.id) == 0:
             return False, "LOG: No traffic present, log not started."
-        self.id2idx = np.vectorize(self.sim.traf.id2idx)  # vectorize function
+        self.id2idx = np.vectorize(traf.id2idx)  # vectorize function
         if acbatch is None:  # No batch defined, log all
-            self.aclist = self.id2idx(self.sim.traf.id)
+            self.aclist = self.id2idx(traf.id)
         elif acbatch == 'AREA':
-            if self.sim.traf.swarea:
-                self.aclist = self.id2idx(self.sim.traf.id)
+            if traf.swarea:
+                self.aclist = self.id2idx(traf.id)
             else:
                 return False, "LOG: AREA DISABLED, LOG NOT STARTED"
         else:
@@ -59,7 +60,8 @@ class Datalog():
             self.swlog = True
         return True, "LOG started."
 
-    def update(self, sim):
+    def update(self):
+        sim = self.sim
         if not self.swlog:                     # Only update when logging started an traffic is selected
             return
         if abs(sim.simt - self.t0) < self.dt:  # Only do something when time is there
@@ -69,20 +71,22 @@ class Datalog():
         t = tim2txt(sim.simt)                  # Nicely formated time
 
         if self.aclist.ndim < 1:               # Write to buffer for one AC
-            self.writebuffer(sim, t, self.aclist)
+            self.writebuffer(t, self.aclist)
         else:                                  # Write to buffer for multiple AC
             for i in self.aclist:
-                self.writebuffer(sim, t, self.aclist[i])
+                self.writebuffer(t, self.aclist[i])
         return
 
-    def writebuffer(self, sim, t, idx):
+    def writebuffer(self, t, idx):
+        traf = self.sim.traf
+        metrics = self.sim.metrics
         self.buffer.append(t + ";" +
-                           str(sim.traf.id[idx]) + ";" +
-                           str(sim.traf.gs[idx]) + ";" +
-                           str(sim.traf.vs[idx]) + ";" +
-                           str(sim.traf.trk[idx]) + ";" +
-                           str(sim.traf.lat[idx]) + ";" +
-                           str(sim.traf.lon[idx]) + "\n")
+                           str(traf.id[idx]) + ";" +
+                           str(traf.gs[idx]) + ";" +
+                           str(traf.vs[idx]) + ";" +
+                           str(traf.trk[idx]) + ";" +
+                           str(traf.lat[idx]) + ";" +
+                           str(traf.lon[idx]) + "\n")
         return
 
     def save(self):  # Write buffer to file

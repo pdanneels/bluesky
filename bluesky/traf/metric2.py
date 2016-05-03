@@ -2,10 +2,10 @@
 #from time import time,gmtime,strftime
 import numpy as np
 #import matplotlib.pyplot as plt
-#from math import degrees
+from math import sqrt
 #import collections
 #from collections import defaultdict
-#import itertools as IT
+import itertools as it
 #from ..tools.misc import tim2txt
 from ..tools.aero import R
 from ..tools.aero_np import qdrdist_vector
@@ -31,7 +31,7 @@ class metric_TD():
     
     """
     def __init__(self, sim):
-        pass
+        self.sim = sim
     
     def update(self):
         pass
@@ -68,13 +68,14 @@ class metric_Vrel():
     def __init__(self,sim):
             self.sim = sim
     def speed_vectors(self): # perform calculations on traf set in simulation object
+            traf = self.sim.traf
             # speed vectors in Earth-Fixed reference frame meaning x points towards North, Z towards center of the Earth, right hand system
             # vectV[AC,1,[Vx,Vy,Vz]]
             size = self.sim.traf.gs.size
             vectV = np.zeros((size,1,3))
-            vectV[:,:,0] = (self.sim.traf.gs*np.sin(self.sim.traf.ahdg*np.pi/180)).reshape((size,1))
-            vectV[:,:,1] = (self.sim.traf.gs*np.cos(self.sim.traf.ahdg*np.pi/180)).reshape((size,1))
-            vectV[:,:,2] = -self.sim.traf.vs.reshape((size,1))
+            vectV[:,:,0] = (traf.gs*np.sin(traf.ahdg*np.pi/180)).reshape((size,1))
+            vectV[:,:,1] = (traf.gs*np.cos(traf.ahdg*np.pi/180)).reshape((size,1))
+            vectV[:,:,2] = -traf.vs.reshape((size,1))
             
             # relative speed vectors
             vectdV = np.zeros((size,size,3))                        
@@ -84,18 +85,24 @@ class metric_Vrel():
             
             # relative speed squared
             dVsqr = np.sum(np.square(vectdV), axis=2)
-                        
-            # dist = [ac][ac][bearing,distance]
-            n = len(self.sim.traf.lat)
-            qdrdist = np.zeros((n,n,2))            
-            for i in range(n):   
-                for j in range(n):
-                    qdrdist[i][j][0], qdrdist[i][j][1] = qdrdist_vector(self.sim.traf.lat[i], self.sim.traf.lon[i], self.sim.traf.lat[j], self.sim.traf.lon[j])
+
+            combslatA,combslatB = np.meshgrid(traf.lat,traf.lat)
+            combslonA,combslonB = np.meshgrid(traf.lon,traf.lon)
+            bearingabs,distance = qdrdist_vector(combslatA.flatten(), combslonA.flatten(), combslatB.flatten(), combslonB.flatten())
+            bearing = bearingabs - np.tile(traf.trk.flatten(),size)   # get relative bearing (between track and absolute bearing)
+            qdrdist = np.zeros((size,size,2))            
+            qdrdist[:,:,0] = np.reshape(bearing,(size,size))
+            qdrdist[:,:,1] = np.reshape(distance,(size,size))
             
             return vectV, qdrdist, dVsqr # speed vector matrix in Fe [AC,1,[Vx,Vy,Vz]], distance matrix [AC,AC,[bearing,distance]], relative speed matrix
             
     def update(self):
+        _,qdrdist,dVsqr = self.speed_vectors()
+        print "average dV: " + str(sqrt(np.average(dVsqr)))
+    
+    def log(self):
         pass
+        
             
 class metric_dHDG():
     """
@@ -139,7 +146,7 @@ class metric_severitytime():
     def update(self):
         pass
 
-class Metric():
+class Metrics():
     """ 
     Metric class definition : traffic metrics
 
@@ -149,7 +156,8 @@ class Metric():
     
     """
     
-    def __init__(self,sim):   
+    def __init__(self,sim):
+        self.sim = sim
         # Last time for which Metrics.update was called 
         self.t0 = -9999   # force first time call, update
         self.t1 = -9999   # force first time call, plot  
@@ -159,14 +167,21 @@ class Metric():
         self.dtplot = 5 # [seconds]
         
         self.name = ("TD-Metric","Cr-Metric","Vrel-Metric","dHDG-Metric","rdot-Metric","severity-Metric")
-        self.metric = np.vectorize(metric_TD(sim), metric_Cr(sim), metric_Vrel(sim), metric_dHDG(sim), metric_rdot(sim), metric_severitytime(sim))
-        self.swmetric = [0,0,0,0,0,0]
+        self.swmetrics = [0,0,1,0,0,0]
+        #self.metrics = [np.vectorize(metric_TD(sim)), 
+#                        np.vectorize(metric_Cr(sim)), 
+#                        np.vectorize(metric_Vrel(sim)), 
+#                        np.vectorize(metric_dHDG(sim)), 
+#                        np.vectorize(metric_rdot(sim)), 
+#                        np.vectorize(metric_severitytime(sim))]
+        self.vrel = metric_Vrel(sim)
         
         return
                 
-    def update(self,sim):
+    def update(self):
+        sim = self.sim
         # Check if configured and there is actual traffic
-        if np.sum(self.swmetric) < 1 or sim.traf.ntraf < 1:
+        if np.sum(self.swmetrics) < 1 or sim.traf.ntraf < 1:
             return
         # Only do something when time is there 
         if abs(sim.simt-self.t0)<self.dt:
@@ -174,13 +189,19 @@ class Metric():
         self.t0 = sim.simt  # Update time for scheduler
         
         if sim.simt >= 0: # Perform update
-            for i in range(self.metric):
-                if self.swmetric[i]: # If enabled, update
-                    self.metric[i].update()
+            self.vrel.update()
             
-    def plot(self,sim):
+#            j = 0
+#            for i in self.metrics:
+#                if self.swmetrics[j]: # If enabled, update
+#                    i.update()
+#                j += 1
+        return
+    
+    def plot(self):
+        sim = self.sim
         # Check if configured and there is actual traffic
-        if np.sum(self.swmetric) < 1 or sim.traf.ntraf < 1:
+        if np.sum(self.swmetrics) < 1 or sim.traf.ntraf < 1:
             return
         # Only do something when time is there 
         if abs(sim.simt-self.t1)<self.dtplot:
@@ -193,4 +214,4 @@ class Metric():
             self.metric[self.metric_number].plot(sim)
             
         sim.start()
-        return    
+        return
