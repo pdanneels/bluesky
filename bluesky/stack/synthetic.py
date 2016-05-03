@@ -10,7 +10,7 @@ from misc import txt2alt, txt2spd
     
 '''
 
-savescenarios=False #whether to save a scenario as .scn file after generation via commands
+savescenarios=True #whether to save a scenario as .scn file after generation via commands
 
 def process(command, numargs, cmdargs, sim, traf, scr, cmd):
     # First, find by which callsign the CFreeFlight module is called in Cstack.py
@@ -87,18 +87,18 @@ def process(command, numargs, cmdargs, sim, traf, scr, cmd):
             scr.isoalt=0
             traf.reset(sim.navdb)
             numac=int(float(cmdargs[1]))
-            distance=0.50 #this is in degrees lat/lon, for now
+            distance=1.0 #this is in degrees lat/lon, for now
             alt=20000*ft #ft
             spd=200 #kts
             for i in range(numac):
                 angle=2*np.pi/numac*i
                 acid="SUP"+str(i)
-                traf.create(acid,"SUPER",distance*-np.cos(angle),distance*np.sin(angle),360-360/numac*i,alt,spd)
+                traf.create(acid,"SUPER",distance*-np.cos(angle),distance*np.sin(angle),360.-360./numac*i,alt,spd)
             if savescenarios:
                 fname="super"+str(numac)
                 cmd.saveic(fname,sim,traf)
-
     
+   
     # create a sphereconflict of 3 layers of superconflicts
     elif command == "SPHERE":
         if numargs ==0:
@@ -268,6 +268,9 @@ def process(command, numargs, cmdargs, sim, traf, scr, cmd):
                     alternate = alternate * -1   
                     
                 scr.pan([0,0],True)
+                if savescenarios:
+                    fname="row"+str(int(ang*2))+"."+str(int(float(cmdargs[1])))
+                    cmd.saveic(fname,sim,traf)
             except:
                 scr.echo('Syntax error')
                 scr.echo(commandhelp) 
@@ -304,6 +307,9 @@ def process(command, numargs, cmdargs, sim, traf, scr, cmd):
                     traf.create("ANG"+str(i*2+1), actype, aclat, -aclon, 180-ang, acalt*ft, acspd)  
     
                 scr.pan([0,0],True)
+                if savescenarios:
+                    fname="column"+str(int(ang*2))+"."+str(int(float(cmdargs[1])))
+                    cmd.saveic(fname,sim,traf)
             except:
                 scr.echo('Syntax error')
                 scr.echo(commandhelp)    
@@ -323,9 +329,32 @@ def process(command, numargs, cmdargs, sim, traf, scr, cmd):
             traf.create("NEM1", actype, -aclat, -aclon, 90, acalt*ft, acspd)  
                     
             scr.pan([0,0],True)
+            if savescenarios:
+                    fname="nearmiss"
+                    cmd.saveic(fname,sim,traf)
         except:
             scr.echo('Syntax error')
             scr.echo(commandhelp)
+            
+    
+    # create a partial super based on the Durant Barnier paper
+    elif command == "PARTSUPER": 
+        if numargs ==0:
+            scr.echo(callsign+"PARTSUPER <NUMBER OF A/C> [-r=radius in NM]")
+        else:
+            scr.isoalt=0
+            traf.reset(sim.navdb)
+            numac=int(float(cmdargs[1]))
+            _,_,_,gc = argparse.optional(cmdargs[1:])
+            alt=20000*ft #ft
+            spd=200 #kts
+            for i in range(numac):
+                angle=np.pi/180*5*i # increments of 5deg
+                acid="SUP"+str(i)
+                traf.create(acid,"SUPER",-gc*np.cos(angle),gc*np.sin(angle),360.-5.*i,alt,spd)
+            if savescenarios:
+                fname="partsuper"+str(numac)
+                cmd.saveic(fname,sim,traf)
                    
     #give up
     else:
