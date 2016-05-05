@@ -92,7 +92,7 @@ class metric_CA():
     
     def update(self,geo):
         traf = self.sim.traf
-        ca = traf.dbconf.nconf/traf.ntraf
+        ca = float(traf.dbconf.nconf)/traf.ntraf
         print "Conflicts per AC: " + str(ca)
         return ca
     
