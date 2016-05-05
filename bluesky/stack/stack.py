@@ -306,9 +306,9 @@ class Commandstack:
         for i in range(traf.ntraf):
             # CRE acid,type,lat,lon,hdg,alt,spd
             cmdline = "CRE " + traf.id[i] + "," + traf.type[i] + "," + \
-                      repr(traf.lat[i]) + "," + repr(traf.lon[i]) + "," + \
-                      repr(traf.trk[i]) + "," + repr(traf.alt[i] / ft) + "," + \
-                      repr(tas2cas(traf.tas[i], traf.alt[i]) / kts)
+                      "%.10f" % traf.lat[i] + "," + "%.10f" % traf.lon[i] + "," + \
+                      "%.10f" % traf.trk[i] + "," + "%.10f" % (traf.alt[i] / ft) + "," + \
+                      "%.10f" % (tas2cas(traf.tas[i], traf.alt[i]) / kts)
 
             f.write(timtxt + cmdline + chr(13) + chr(10))
 
