@@ -7,6 +7,7 @@ from ...traf.metric2 import Metrics
 from ...tools.network import StackTelnetServer
 from ... import settings
 from ...tools.datafeed import Modesbeast
+from ...tools.researcharea import Rarea
 
 
 class Simulation:
@@ -52,6 +53,7 @@ class Simulation:
         # Simulation objects
         self.traf  = Traffic(navdb)
         self.navdb = navdb
+        self.rarea = Rarea(self, gui.scr)
         self.metrics = Metrics(self)
 
         # Stack ties it together

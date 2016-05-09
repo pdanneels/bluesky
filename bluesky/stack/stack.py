@@ -8,6 +8,7 @@ from ..tools.aero import kts, ft, fpm, nm, lbs,\
                          qdrdist, cas2tas, mach2tas, tas2cas, tas2eas, tas2mach,\
                          eas2tas, cas2mach, density
 from ..tools.misc import txt2alt, txt2spd, col2rgb, cmdsplit,  txt2lat, txt2lon
+#from ..tools.researcharea import Rarea as rarea
 from .. import settings
 
 # import pdb
@@ -41,7 +42,8 @@ class Commandstack:
             "ADDNODES": [
                 "ADDNODES number",
                 "int",
-                sim.addNodes],
+                sim.addNodes
+            ],
             "ALT": [
                 "ALT acid, alt, [vspd]",
                 "acid,alt,[vspd]",
@@ -129,7 +131,8 @@ class Commandstack:
             "NOM": [
                 "NOM acid",
                 "acid",
-                traf.nom],
+                traf.nom
+            ],
             "OP": [
                 "OP",
                 "",
@@ -140,10 +143,16 @@ class Commandstack:
                 "txt,[txt]",
                 self.pcall
             ],
+            "RAREA": [
+                "RAREA lat0,lon0,lat1,lon1",
+                "lat,lon,lat,lon",
+                lambda *args: sim.rarea.create(*args)
+            ],
             "RESET": [
                 "RESET",
                 "",
-                sim.reset],
+                sim.reset
+            ],
             "SCEN": [
                 "SCEN scenname",
                 "txt",
@@ -152,7 +161,8 @@ class Commandstack:
             "SEED": [
                 "SEED value",
                 "int",
-                self.setSeed],
+                self.setSeed
+            ],
             "SPD": [
                 "SPD acid,spd (CAS-kts/Mach)",
                 "acid,spd",
@@ -176,7 +186,8 @@ class Commandstack:
             "VS": [
                 "VS acid,vspd (ft/min)",
                 "acid,vspd",
-                traf.selvspd]
+                traf.selvspd
+            ]
         }
 
         #--------------------------------------------------------------------
