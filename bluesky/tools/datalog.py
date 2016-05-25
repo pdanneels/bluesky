@@ -1,4 +1,4 @@
-""" 
+"""
 Datalog class definition : Data logging class
 
 Methods:
@@ -6,7 +6,7 @@ Methods:
 
     write(txt)         : add a line to the datalogging buffer
     save()             : save data to file
-   
+
 Created by  : Jacco M. Hoekstra (TU Delft)
 Date        : October 2013
 
@@ -16,9 +16,11 @@ By          : P. Danneels
 Date        : April 2016
 
 """
+# To ignore numpy errors:
+#     pylint: disable=E1101
 import os
 import numpy as np
-from misc import tim2txt
+from ..tools.misc import tim2txt
 from time import strftime, gmtime
 
 #-----------------------------------------------------------------
@@ -35,7 +37,7 @@ class Datalog():
         self.fnamem2 = os.path.dirname(__file__) + "/../../data/output/" \
             + strftime("%Y-%m-%d-%H-%M-%S-BlueSky-metrics2.txt", gmtime())
         self.buffer = ["time;acid;gs;vs;track;lat;long\n"]        # Log data
-        self.m1buffer = ["time;metric;value\n"]   
+        self.m1buffer = ["time;metric;value\n"]
         self.aclist = np.zeros(1)                                 # AC list to log
         self.dt = 1.                                              # Default logging interval
         self.t0 = -9999                                           # Timers
@@ -68,7 +70,7 @@ class Datalog():
 
     def update(self):
         sim = self.sim
-        if not self.swlog:                     # Only update when logging started an traffic is selected
+        if not self.swlog:                     # Only when logging started
             return
         if abs(sim.simt - self.t0) < self.dt:  # Only do something when time is there
             return
@@ -82,7 +84,7 @@ class Datalog():
             for i in self.aclist:
                 self.writebuffer(t, self.aclist[i])
         return
-        
+
     def writebuffer(self, t, idx):
         traf = self.sim.traf
         self.buffer.append(t + ";" +
@@ -93,18 +95,19 @@ class Datalog():
                            str(traf.lat[idx]) + ";" +
                            str(traf.lon[idx]) + "\n")
         return
-    
-    ############################
-    #   General save funtion   #
-    ############################
-    def save(self):  # Write buffer to file
+
+    def save(self):
+        """
+        General save function, writing buffer to file
+
+        """
         if self.swlog:                  # save log if logging enabled
             f = open(self.fname, "w")
             f.writelines(self.buffer)
             f.close()
         self.savem1()                   # save metrics log 1
         return
-        
+
     ###############
     #   METRICS   #
     ###############
@@ -113,8 +116,8 @@ class Datalog():
         t = tim2txt(sim.simt)                   # Nicely formated time
         self.writem1(t, var, val)
         return
-    
-    def writem1(self,t,var,val):
+
+    def writem1(self, t, var, val):
         self.m1buffer.append(t + ";" + var + ";" + val + "\n")
         return
 
