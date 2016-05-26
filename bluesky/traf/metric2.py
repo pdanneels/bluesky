@@ -234,6 +234,9 @@ class metric_severitytime():
     def update(self):
         pass
 
+    def gethist(self):
+        return 0
+
 class metric_TD():
     """
     METRIC: TRAFFIC DENSITY
