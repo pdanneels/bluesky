@@ -57,7 +57,7 @@ class Rarea:
         self.eastb = max(lon0, lon1)
         self.westb = min(lon0, lon1)
         self.surfacearea = latlondist(self.southb, self.westb, self.southb, self.eastb) * \
-                 latlondist(self.southb, self.eastb, self.northb, self.eastb)
+                            latlondist(self.southb, self.eastb, self.northb, self.eastb)
         scr.objappend(1, "RAREA", [self.northb, self.westb, self.northb, self.eastb])
         scr.objappend(1, "RAREA", [self.northb, self.eastb, self.southb, self.eastb])
         scr.objappend(1, "RAREA", [self.southb, self.eastb, self.southb, self.westb])

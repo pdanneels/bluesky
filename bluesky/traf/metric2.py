@@ -92,7 +92,7 @@ class Geometric():
         self.size = self.sim.traf.gs.size
         self.vectV, self.qdrdist, self.dVsqr, self.dhdg = self.calcgeo()
 
-class metric_CA():
+class MetricConflictsPerAc():
     """
     METRIC: CONFLICTS/AC
 
@@ -105,17 +105,17 @@ class metric_CA():
 
     def update(self, geo):
         traf = self.sim.traf
-        self.ca = float(traf.dbconf.nconf)/traf.ntraf
+        self.conflictsperac = float(traf.dbconf.nconf)/traf.ntraf
         self.timehist.append(self.sim.simt)
-        self.hist.append(self.ca)
+        self.hist.append(self.conflictsperac)
         if self.swprint:
-            print "Conflicts per AC: " + str(self.ca)
+            print "Conflicts per AC: " + str(self.conflictsperac)
         return self.ca
 
     def gethist(self):
         return np.array((self.timehist, self.hist))
 
-class metric_Cr():
+class MetricConflictRate():
     """
     METRIC: CONFLICT RATE
 
@@ -137,7 +137,7 @@ class metric_Cr():
     def update(self, geo):
         sim = self.sim
         rarea = sim.rarea
-        self.cr = -1
+        self.conflictrate = -1
         if rarea.surfacearea != 0: # only perform calculations if a research area is defined
             i = 0
             ioac = []
@@ -149,19 +149,19 @@ class metric_Cr():
                     iot.append(rarea.leavetime[i]-rarea.entertime[i])
                     iov.append(rarea.gs[i])
             if len(ioac) != 0:
-                self.cr = np.average(np.array(iov))*self.sep*np.average(np.array(iot))/rarea.surfacearea/(sim.simt - rarea.entertime[1])
+                self.conflictrate = np.average(np.array(iov))*self.sep*np.average(np.array(iot))/rarea.surfacearea/(sim.simt - rarea.entertime[1])
                 self.timehist.append(sim.simt)
-                self.hist.append(self.cr)
+                self.hist.append(self.crconflictrate)
                 if self.swprint:
-                    print "Collision rate: " + str(self.cr)
-        return self.cr
+                    print "Collision rate: " + str(self.crconflictrate)
+        return self.conflictrate
 
     def gethist(self):
         return np.array((self.timehist, self.hist))
 
-class metric_dHDG():
+class MetricRelativeHeading():
     """
-    METRIC: DELTA HEADING
+    METRIC: RELATIVE HEADING
 
     """
     def __init__(self, sim, swprint):
@@ -183,7 +183,7 @@ class metric_dHDG():
     def gethist(self):
         return np.array((self.timehist, self.hist))
 
-class metric_rdot():
+class MetricRangeDot():
     """
     METRIC: RANGE RATE
     project vectV on dist to get rdot, requires qdrdist (from speed_vectors function)
@@ -206,8 +206,8 @@ class metric_rdot():
         return
 
     def update(self, geo):
-        self.n = len(self.sim.traf.gs)
-        self.rdot = np.zeros((self.n, self.n))
+        self.numberofac = len(self.sim.traf.gs)
+        self.rdot = np.zeros((self.numberofac, self.numberofac))
         #self.calcrdot(geo.qdrdist)
         self.calcrdot(geo.dhdg)
         mask = np.ones(self.rdot.shape, dtype=bool)
@@ -222,7 +222,7 @@ class metric_rdot():
     def gethist(self):
         return np.array((self.timehist, self.hist))
 
-class metric_severitytime():
+class MetricSeverityTime():
     """
     METRIC: SEVERITY TIME
 
@@ -237,7 +237,7 @@ class metric_severitytime():
     def gethist(self):
         return 0
 
-class metric_TD():
+class MetricTrafficDensity():
     """
     METRIC: TRAFFIC DENSITY
 
@@ -252,19 +252,19 @@ class metric_TD():
 
     def update(self, geo):
         sim = self.sim
-        self.td = 0
+        self.interval = 0
         if sim.rarea.surfacearea != 0:
-            self.td = sim.traf.ntraf / sim.rarea.surfacearea * 1000000.0
+            self.interval = sim.traf.ntraf / sim.rarea.surfacearea * 1000000.0
             self.timehist.append(sim.simt)
-            self.hist.append(self.td)
+            self.hist.append(self.interval)
             if self.swprint:
-                print "Traffic density: " + str(self.td) + " AC/km2"
-        return self.td
+                print "Traffic density: " + str(self.interval) + " AC/km2"
+        return self.interval
 
     def gethist(self):
         return np.array((self.timehist, self.hist))
 
-class metric_Vrel():
+class MetricRelativeVelocity():
     """
     METRIC: RELATIVE VELOCITY
 
@@ -286,7 +286,7 @@ class metric_Vrel():
     def gethist(self):
         return np.array((self.timehist, self.hist))
 
-class metric_other():
+class MetricOther():
     def __init__(self, sim, rarea, swprint):
         self.sim = sim
         self.rarea = rarea
@@ -334,22 +334,22 @@ class Metrics():
         self.swprint = True     # Toggle print
 
         # Time
-        self.t0 = -9999         # force first time call, update
-        self.t1 = -9999         # force first time call, plot
-        self.dt = 1             # [seconds]
-        self.dtplot = 15        # [seconds]
+        self.timer0 = -9999         # force first time call, update
+        self.timer1 = -9999         # force first time call, plot
+        self.intervalmetrics = 1    # [seconds]
+        self.intervalplot = 15      # [seconds]
 
         self.fig = None
 
         # Metrics instances
-        self.vrel = metric_Vrel(sim, self.swprint)
-        self.cr = metric_Cr(sim, self.swprint)
-        self.td = metric_TD(sim, self.swprint)
-        self.ca = metric_CA(sim, self.swprint)
-        self.rdot = metric_rdot(sim, self.swprint)
-        self.sevtime = metric_severitytime(sim, self.swprint)
-        self.dhdg = metric_dHDG(sim, self.swprint)
-        self.ot = metric_other(sim, sim.rarea, self.swprint)
+        self.vrel = MetricRelativeVelocity(sim, self.swprint)
+        self.conflictrate = MetricConflictRate(sim, self.swprint)
+        self.trafficdensity = MetricTrafficDensity(sim, self.swprint)
+        self.ca = MetricConflictsPerAc(sim, self.swprint)
+        self.rdot = MetricRangeDot(sim, self.swprint)
+        self.sevtime = MetricSeverityTime(sim, self.swprint)
+        self.dhdg = MetricRelativeHeading(sim, self.swprint)
+        self.ot = MetricOther(sim, sim.rarea, self.swprint)
         return
 
     def update(self):
@@ -366,9 +366,9 @@ class Metrics():
         if not self.swmetrics:
             return
         # Only do something when time is there
-        if abs(sim.simt-self.t0) < self.dt:
+        if abs(sim.simt-self.timer0) < self.intervalmetrics:
             return
-        self.t0 = sim.simt  # Update time for scheduler
+        self.timer0 = sim.simt  # Update time for scheduler
 
         if rarea is not None:  # Update tracking DB for research area
             rarea.update()
@@ -378,10 +378,10 @@ class Metrics():
         geo = Geometric(sim)        # fresh instance of geo data
         geo.update()
         log.updatem1("CA", str(self.ca.update(geo)))            # collisions devided by #AC
-        log.updatem1("Cr", str(self.cr.update(geo)))            # collision rate
+        log.updatem1("Cr", str(self.conflictrate.update(geo)))            # collision rate
         log.updatem1("avgdHDG", str(self.dhdg.update(geo)))     # average range rate
         log.updatem1("avgrdot", str(self.rdot.update(geo)))     # average range rate
-        log.updatem1("Td", str(self.td.update(geo)))            # traffic density
+        log.updatem1("Td", str(self.trafficdensity.update(geo)))            # traffic density
         log.updatem1("avgdV", str(self.vrel.update(geo)))       # average relative velocity
         log.updatem1("avgV", str(np.average(sim.traf.gs)))      # average groundspeed
         self.ot.update()
@@ -389,104 +389,108 @@ class Metrics():
             print "------------------------"
 
         if self.swplot: # Plot
-            if abs(sim.simt-self.t1) < self.dtplot:
+            if abs(sim.simt-self.timer1) < self.intervalplot:
                 sim.start() # "The show must go on" - Freddie Mercury, Queen -
                 return
-            self.t1 = sim.simt
-            if self.fig is None:
-                self.fig = plt.figure()
-            plt.clf() # Fresh plots
-            mask = np.ones((geo.size, geo.size), dtype=bool)
-            #mask = np.triu(mask,1) # this is problematic for traf.ntraf<=2
-            mask = np.fill_diagonal(mask, 0) # exclude diagonal from data
-            ##################
-            #   Histograms   #
-            ##################
-            self.fig.add_subplot(231)
-            v = np.squeeze(sim.traf.gs)
-            plt.hist(v, bins=50)
-            plt.xlim(50, 450)
-            plt.title("Velocity")
+            self.timer1 = sim.simt
+            self.plot(sim, geo)
+            sim.start() # "The show must go on" - Freddie Mercury, Queen -
+        return
 
-            self.fig.add_subplot(232)
-            dV = np.sqrt(geo.dVsqr[mask]).flatten()
-            plt.hist(dV, bins=50)
-            plt.xlim(-1, 800)
-            plt.title("Relative velocity")
+    def plot(self, sim, geo):
+        if self.fig is None:
+            self.fig = plt.figure()
+        plt.clf() # Fresh plots
+        mask = np.ones((geo.size, geo.size), dtype=bool)
+        #mask = np.triu(mask,1) # this is problematic for traf.ntraf<=2
+        mask = np.fill_diagonal(mask, 0) # exclude diagonal from data
+        ##################
+        #   Histograms   #
+        ##################
+        self.fig.add_subplot(231)
+        velocity = np.squeeze(sim.traf.gs)
+        plt.hist(velocity, bins=50)
+        plt.xlim(50, 450)
+        plt.title("Velocity")
 
-            self.fig.add_subplot(233)
-            dR = geo.qdrdist[:, :, 1][mask].flatten()
-            plt.hist(dR, bins=50)
-            plt.xlim(-1, 600)
-            plt.title("Relative distance")
+        self.fig.add_subplot(232)
+        dvelocity = np.sqrt(geo.dVsqr[mask]).flatten()
+        plt.hist(dvelocity, bins=50)
+        plt.xlim(-1, 800)
+        plt.title("Relative velocity")
 
-            self.fig.add_subplot(234)
-            dHDG = geo.dhdg[mask].flatten()
-            plt.hist(dHDG, bins=50)
-            plt.xlim(-180, 180)
-            plt.title("Relative bearing")
+        self.fig.add_subplot(233)
+        drange = geo.qdrdist[:, :, 1][mask].flatten()
+        plt.hist(drange, bins=50)
+        plt.xlim(-1, 600)
+        plt.title("Relative distance")
 
-            self.fig.add_subplot(235)
-            rd = self.rdot.rdot[mask].flatten()
-            plt.hist(rd, bins=50)
-            plt.xlim(-700, 700)
-            plt.title("Range rate")
-            #######################################
-            #   Evolution of averages over time   #
-            #######################################
-#            histgs,histntraf,histrantraf = self.ot.gethist()
-#
-#            self.fig.add_subplot(331)
-#            plt.plot(histntraf[0,:],histntraf[1,:])
-#            plt.ylabel("#AC")
-#            plt.title("#AC evolution")
-#
-#            self.fig.add_subplot(332)
-#            plt.plot(histrantraf[0,:],histrantraf[1,:])
-#            plt.title("#AC in RA evolution")
-#            plt.ylabel("#AC")
-#
-#            self.fig.add_subplot(333)
-#            hist = self.ca.gethist()
-#            plt.plot(hist[0,:],hist[1,:])
-#            plt.title("Conflicts per AC evolution")
-#
-#            self.fig.add_subplot(334)
-#            hist = self.cr.gethist()
-#            plt.plot(hist[0,:],hist[1,:])
-#            plt.title("Cr evolution")
-#
-#            self.fig.add_subplot(335)
-#            plt.plot(histgs[0,:],histgs[1,:])
-#            plt.ylabel("m/s")
-#            plt.title("Average V evolution")
-#
-#            self.fig.add_subplot(336)
-#            hist = self.vrel.gethist()
-#            plt.plot(hist[0,:],hist[1,:])
-#            plt.ylabel("m/s")
-#            plt.title("Average dV evolution")
-#
-#            self.fig.add_subplot(337)
-#            hist = self.dhdg.gethist()
-#            plt.plot(hist[0,:],hist[1,:])
-#            plt.ylabel("deg")
-#            plt.title("Average dHDG evolution")
-#
-#            self.fig.add_subplot(338)
-#            hist = self.td.gethist()
-#            plt.plot(hist[0,:],hist[1,:])
-#            plt.ylabel("#AC/km2")
-#            plt.title("Traffic density evolution")
-#
-#            self.fig.add_subplot(339)
-#            hist = self.rdot.gethist()
-#            plt.plot(hist[0,:],hist[1,:])
-#            plt.ylabel("m/s")
-#            plt.title("Average range rate evolution")
+        self.fig.add_subplot(234)
+        dheading = geo.dhdg[mask].flatten()
+        plt.hist(dheading, bins=50)
+        plt.xlim(-180, 180)
+        plt.title("Relative bearing")
 
-            plt.draw()
-            plt.show()
+        self.fig.add_subplot(235)
+        rangedot = self.rdot.rdot[mask].flatten()
+        plt.hist(rangedot, bins=50)
+        plt.xlim(-700, 700)
+        plt.title("Range rate")
+        #######################################
+        #   Evolution of averages over time   #
+        #######################################
+#        histgs,histntraf,histrantraf = self.ot.gethist()
+#
+#        self.fig.add_subplot(331)
+#        plt.plot(histntraf[0,:],histntraf[1,:])
+#        plt.ylabel("#AC")
+#        plt.title("#AC evolution")
+#
+#        self.fig.add_subplot(332)
+#        plt.plot(histrantraf[0,:],histrantraf[1,:])
+#        plt.title("#AC in RA evolution")
+#        plt.ylabel("#AC")
+#
+#        self.fig.add_subplot(333)
+#        hist = self.ca.gethist()
+#        plt.plot(hist[0,:],hist[1,:])
+#        plt.title("Conflicts per AC evolution")
+#
+#        self.fig.add_subplot(334)
+#        hist = self.cr.gethist()
+#        plt.plot(hist[0,:],hist[1,:])
+#        plt.title("Cr evolution")
+#
+#        self.fig.add_subplot(335)
+#        plt.plot(histgs[0,:],histgs[1,:])
+#        plt.ylabel("m/s")
+#        plt.title("Average V evolution")
+#
+#        self.fig.add_subplot(336)
+#        hist = self.vrel.gethist()
+#        plt.plot(hist[0,:],hist[1,:])
+#        plt.ylabel("m/s")
+#        plt.title("Average dV evolution")
+#
+#        self.fig.add_subplot(337)
+#        hist = self.dhdg.gethist()
+#        plt.plot(hist[0,:],hist[1,:])
+#        plt.ylabel("deg")
+#        plt.title("Average dHDG evolution")
+#
+#        self.fig.add_subplot(338)
+#        hist = self.td.gethist()
+#        plt.plot(hist[0,:],hist[1,:])
+#        plt.ylabel("#AC/km2")
+#        plt.title("Traffic density evolution")
+#
+#        self.fig.add_subplot(339)
+#        hist = self.rdot.gethist()
+#        plt.plot(hist[0,:],hist[1,:])
+#        plt.ylabel("m/s")
+#        plt.title("Average range rate evolution")
 
-        sim.start() # "The show must go on" - Freddie Mercury, Queen -
+        plt.draw()
+        plt.show()
+
         return

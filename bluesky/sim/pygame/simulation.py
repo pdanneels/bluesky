@@ -1,17 +1,18 @@
 import time
-from ...tools.datalog import Datalog
 from ...traf import Traffic
 from ...stack import Commandstack
-from ...traf.metric2 import Metrics
-
-from ...tools.network import StackTelnetServer
 from ... import settings
-from ...tools.datafeed import Modesbeast
-from ...tools.researcharea import Rarea
+from ...tools.datalog import Datalog
+
+#from ...traf.metric2 import Metrics
+#from ...tools.network import StackTelnetServer
+#from ...tools.datafeed import Modesbeast
+#from ...tools.researcharea import Rarea
+from ...tools.mongodb_connector import MongoDB
 
 
 class Simulation:
-    """ 
+    """
     Simulation class definition : simulation control (time, mode etc.) class
 
     Methods:
@@ -30,20 +31,17 @@ class Simulation:
 
     def __init__(self, gui, navdb):
         # simmode
-        self.mode   = self.init
+        self.mode = self.init
 
-        self.simt   = 0.0   # Runtime
-        self.tprev  = 0.0
-        self.syst0  = 0.0
-        self.dt     = 0.0
-        self.syst   = 0.0   # system time
+        self.simt = 0.0   # Runtime
+        self.tprev = 0.0
+        self.syst0 = 0.0
+        self.dt = 0.0
+        self.syst = 0.0   # system time
 
         # Directories
         self.datadir = "./data/"
         self.dts = []
-
-        # Create datalog instance
-        self.datalog = Datalog(self)
 
         # Fixed dt mode for fast forward
         self.ffmode = False  # Default FF off
@@ -51,16 +49,20 @@ class Simulation:
         self.ffstop = -1.    # Indefinitely
 
         # Simulation objects
-        self.traf  = Traffic(navdb)
+        self.traf = Traffic(navdb)
         self.navdb = navdb
-        self.rarea = Rarea(self, gui.scr)
-        self.metrics = Metrics(self)
+
+        self.datalog = Datalog(self)
 
         # Stack ties it together
         self.stack = Commandstack(self, self.traf, gui.scr)
 
-        self.beastfeed   = Modesbeast(self.stack, self.traf)
-        self.telnet_in   = StackTelnetServer(self.stack)
+        # Optional modules
+        self.beastfeed = None # Modesbeast(self.stack, self.traf)
+        self.telnet_in = None # StackTelnetServer(self.stack)
+        self.metrics = None # Rarea(self, gui.scr)
+        self.rarea = None # Metrics(self)
+        self.mdb = MongoDB(self, self.stack)
 
         return
 
@@ -77,12 +79,12 @@ class Simulation:
             # Not fast forward: variable dt
             if not self.ffmode:
                 self.tprev = self.simt
-                self.simt     = self.syst - self.syst0
+                self.simt = self.syst - self.syst0
                 self.dt = self.simt - self.tprev
 
                 # Protect against incidental dt's larger than 1 second,
                 # due to window moving, switch to/from full screen, etc.
-                if self.dt>1.0:
+                if self.dt > 1.0:
                     extra = self.dt-1.0
                     self.simt = self.simt - extra
                     self.syst0 = self.syst-self.simt
@@ -90,21 +92,26 @@ class Simulation:
             # Fast forward: fixed dt until ffstop time, goto pause
             else:
                 self.dt = self.fixdt
-                self.simt = self.simt+self.fixdt
+                self.simt = self.simt + self.fixdt
                 self.syst0 = self.syst - self.simt
-                if self.ffstop > 0. and self.simt>=self.ffstop:
+                if self.ffstop > 0. and self.simt >= self.ffstop:
                     self.ffmode = False
                     self.mode = self.hold
 
             # For measuring game loop frequency
             self.dts.append(self.dt)
-            if len(self.dts)>20:
-                    del self.dts[0]
+            if len(self.dts) > 20:
+                del self.dts[0]
 
             self.stack.checkfile(self.simt)
 
             # Update the Mode-S beast parsing
-            self.beastfeed.update()
+            if self.beastfeed is not None:
+                self.beastfeed.update()
+
+            # Update the MongoDB feed
+            if self.mdb is not None:
+                self.mdb.update()
 
         # Always process stack
         self.stack.process(self, self.traf, scr)
@@ -115,14 +122,14 @@ class Simulation:
             # Update metrics
             if self.metrics is not None:
                 self.metrics.update()
-            
+
             # Update log
             if self.datalog is not None:
                 self.datalog.update()
 
         # HOLD/Pause mode
         else:
-            self.syst0 = self.syst-self.simt
+            self.syst0 = self.syst - self.simt
             self.dt = 0.0
 
         return
@@ -145,7 +152,7 @@ class Simulation:
         return
 
     def stop(self):  # Quit mode
-        self.mode   = self.end
+        self.mode = self.end
         self.datalog.save()
         return
 
