@@ -4,10 +4,10 @@ from ...stack import Commandstack
 from ... import settings
 from ...tools.datalog import Datalog
 
-#from ...traf.metric2 import Metrics
+from ...traf.metric2 import Metrics
 #from ...tools.network import StackTelnetServer
 #from ...tools.datafeed import Modesbeast
-#from ...tools.researcharea import Rarea
+from ...tools.researcharea import Rarea
 from ...tools.mongodb_connector import MongoDB
 
 
@@ -60,8 +60,8 @@ class Simulation:
         # Optional modules
         self.beastfeed = None # Modesbeast(self.stack, self.traf)
         self.telnet_in = None # StackTelnetServer(self.stack)
-        self.metrics = None # Rarea(self, gui.scr)
-        self.rarea = None # Metrics(self)
+        self.rarea = Rarea(self, gui.scr)
+        self.metrics = Metrics(self)
         self.mdb = MongoDB(self, self.stack)
 
         return
@@ -124,8 +124,8 @@ class Simulation:
                 self.metrics.update()
 
             # Update log
-            if self.datalog is not None:
-                self.datalog.update()
+#            if self.datalog is not None:
+#                self.datalog.update()
 
         # HOLD/Pause mode
         else:

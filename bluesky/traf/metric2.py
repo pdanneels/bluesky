@@ -110,7 +110,7 @@ class MetricConflictsPerAc():
         self.hist.append(self.conflictsperac)
         if self.swprint:
             print "Conflicts per AC: " + str(self.conflictsperac)
-        return self.ca
+        return self.conflictsperac
 
     def gethist(self):
         return np.array((self.timehist, self.hist))
@@ -200,8 +200,8 @@ class MetricRangeDot():
         #bearingcomponent = np.cos(np.radians(qdrdist[:,:,0])) # get cosine out of for-loop and do once with np
         bearingcomponent = np.cos(np.radians(bearing))
         np.fill_diagonal(bearingcomponent, 0) # set zero for own
-        for i in range(self.n):
-            for j in range(self.n):
+        for i in range(self.numberofac):
+            for j in range(self.numberofac):
                 self.rdot[i, j] = traf.gs[i]*bearingcomponent[i][j]+traf.gs[j]*bearingcomponent[j][i]
         return
 
