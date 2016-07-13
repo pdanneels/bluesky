@@ -1,16 +1,13 @@
 from math import *
 import numpy as np
-from random import random, randint, seed
+from random import seed
 import os
 import sys
 
-from ..tools.aero import kts, ft, fpm, nm, lbs,\
-                         qdrdist, cas2tas, mach2tas, tas2cas, tas2eas, tas2mach,\
-                         eas2tas, cas2mach, density
-from ..tools.misc import txt2alt, txt2spd, col2rgb, cmdsplit,  txt2lat, txt2lon
+from ..tools import geo
+from ..tools.aero import kts, ft, fpm, tas2cas, density
+from ..tools.misc import txt2alt, cmdsplit, txt2lat, txt2lon
 from .. import settings
-
-# import pdb
 
 
 class Commandstack:
@@ -28,7 +25,6 @@ class Commandstack:
                                   processed from scenario file
 
         process(sim, traf, scr) : central command processing method
-                                  (with long elif tree with all commands)
 
     Created by  : Jacco M. Hoekstra (TU Delft)
     """
@@ -36,47 +32,134 @@ class Commandstack:
 
         #Command dictionary: command, helptext, arglist, function to call
         # Enclose optional arguments with []
+        # Separate argument type variants with /
         #--------------------------------------------------------------------
         self.cmddict = {
             "ADDNODES": [
                 "ADDNODES number",
                 "int",
                 sim.addNodes],
+            "ADDWPT": [
+                "ADDWPT acid, (wpname/lat,lon),[alt],[spd],[afterwp]",
+                "acid,latlon/txt,[alt,spd,txt]",
+                # lambda: short-hand for using function output as argument, equivalent with:
+                #
+                # def fun(idx, args):
+                #     return traf.route[idx].addwptStack(traf, idx, *args)
+                # fun(idx,*args)
+                lambda idx, *args: traf.route[idx].addwptStack(traf, idx, *args)
+            ],
             "ALT": [
                 "ALT acid, alt, [vspd]",
                 "acid,alt,[vspd]",
                 traf.selalt
             ],
+            "AREA": [
+                "AREA OFF, or\nlat0,lon0,lat1,lon1[,lowalt]\nor\nAREA FIR,radius[,lowalt]\nor\nAREA CIRCLE,lat0,lon0,radius[,lowalt]",
+                "float/txt,float,[float,float,float]",
+                lambda *args: traf.setArea(scr, sim.metric, *args)
+            ],
+            "ASAS": [
+                "ASAS ON/OFF",
+                "[onoff]",
+                traf.asas.toggle
+            ],
             "BATCH": [
                 "BATCH filename",
-                "txt",
+                "string",
                 sim.batch],
+            "BENCHMARK": [
+                "BENCHMARK [scenfile,time]",
+                "[txt,time]",
+                sim.benchmark
+            ],
+            "BOX": [
+                "BOX name,lat,lon,lat,lon",
+                "txt,latlon,latlon",
+                lambda name, *coords: scr.objappend(2, name, coords)
+            ],
+            "CALC": [
+                "CALC expression",
+                "string",
+                lambda expr: scr.echo("Ans = " + str(eval(expr)))
+            ],
+            "CDMETHOD": [
+                "CDMETHOD [method]",
+                "[txt]",
+                traf.asas.SetCDmethod
+            ],
+            "CIRCLE": [
+                "CIRCLE name,lat,lon,radius",
+                "txt,latlon,float",
+                lambda name, *coords: scr.objappend(3, name, coords)
+            ],
             "CRE": [
                 "CRE acid,type,lat,lon,hdg,alt,spd",
-                "txt,txt,lat,lon,hdg,alt,spd",
+                "txt,txt,pos,hdg,alt,spd",
                 traf.create
             ],
-            "DATAFEED":  [
-                "DATAFEED [ON/OFF]",
-                "[onoff]",
-                sim.datafeed
+            "DEL": [
+                "DEL acid/shape",
+                "txt",
+                lambda a: traf.delete(a) if traf.id.count(a) > 0 \
+                else scr.objappend(0, a, None)
+            ],
+            "DELWPT": [
+                "DELWPT acid,wpname",
+                "acid,txt",
+                lambda idx, wpname: traf.route[idx].delwpt(wpname)
+            ],
+            "DEST": [
+                "DEST acid, latlon/airport",
+                "acid,latlon/txt",
+                lambda idx, *args: traf.setDestOrig("DEST", idx, *args)
+            ],
+            "DIRECT": [
+                "DIRECT acid wpname",
+                "acid,txt",
+                lambda idx, wpname: traf.route[idx].direct(traf, idx, wpname)
+            ],
+            "DIST": [
+                "DIST lat0, lon0, lat1, lon1",
+                "latlon,latlon",
+                lambda *args: scr.echo("QDR = %.2f deg, Dist = %.3f nm" % geo.qdrdist(*args))
             ],
             "DT": [
                 "DT dt",
                 "float",
                 sim.setDt
             ],
+            "DTLOOK": [
+                "DTLOOK [time]",
+                "[float]",
+                traf.asas.SetDtLook
+            ],
             "DTMULT": [
                 "DTMULT multiplier",
                 "float",
                 sim.setDtMultiplier
+            ],
+            "DTNOLOOK": [
+                "DTNOLOOK [time]",
+                "[float]",
+                traf.asas.SetDtNoLook
+            ],
+            "DUMPRTE": [
+                "DUMPRTE acid",
+                "acid",
+                lambda idx: traf.route[idx].dumpRoute(traf, idx)
+            ],
+            "ECHO": [
+                "ECHO txt",
+                "string",
+                scr.echo
             ],
             "ENG": [
                 "ENG acid,[engine_id]",
                 "acid,[txt]",
                 traf.perf.engchange
             ],
-            "FF":  [
+            "FF": [
                 "FF [tend]",
                 "[time]",
                 sim.fastforward
@@ -101,6 +184,31 @@ class Commandstack:
                 "",
                 sim.pause
             ],
+            "IC": [
+                "IC [IC/filename]",
+                "[txt]",
+                lambda *args: self.ic(scr, sim, *args)
+            ],
+            "INSEDIT": [
+                "INSEDIT txt",
+                "string",
+                scr.cmdline
+            ],
+            "LINE": [
+                "LINE name,lat,lon,lat,lon",
+                "txt,latlon,latlon",
+                lambda name, *coords: scr.objappend(1, name, coords)
+            ],
+            "LISTRTE": [
+                "LISTRTE acid, [pagenr]",
+                "acid,[int]",
+                lambda idx, *args: traf.route[idx].listrte(scr, *args)
+            ],
+            "LNAV": [
+                "LNAV acid,[ON/OFF]",
+                "acid,[onoff]",
+                traf.setLNAV
+            ],
             "LOG": [
                 "LOG acid/area/*,dt",
                 "txt,float",
@@ -111,9 +219,14 @@ class Commandstack:
                 "int,[txt,alt,spd,txt]",
                 lambda *args: traf.mcreate(*args, area=scr.getviewlatlon())
             ],
+            "METRIC": [
+                "METRIC OFF/0/1/2, [dt]",
+                "onoff/int,[float]",
+                lambda *args: sim.metric.toggle(traf, *args)
+            ],
             "MOVE": [
                 "MOVE acid,lat,lon,[alt,hdg,spd,vspd]",
-                "acid,lat,lon,[alt,hdg,spd,vspd]",
+                "acid,latlon,[alt,hdg,spd,vspd]",
                 traf.move
             ],
             "ND": [
@@ -135,18 +248,58 @@ class Commandstack:
                 "",
                 sim.start
             ],
+            "ORIG": [
+                "ORIG acid, latlon/airport",
+                "acid,latlon/txt",
+                lambda *args: traf.setDestOrig("ORIG", *args)
+            ],
+            "PAN": [
+                "PAN latlon/acid/airport/waypoint",
+                "pos/txt",
+                scr.pan
+            ],
             "PCALL": [
                 "PCALL filename [REL/ABS]",
                 "txt,[txt]",
-                self.pcall
+                lambda *args: self.openfile(*args, mergeWithExisting=True)
+            ],
+            "POLY": [
+                "POLY name,lat,lon,lat,lon, ...",
+                "txt,latlon,...",
+                lambda name, *coords: scr.objappend(4, name, coords)
+            ],
+            "POS": [
+                "POS acid",
+                "txt",
+                lambda acid: scr.showacinfo(acid, traf.acinfo(acid))
             ],
             "RESET": [
                 "RESET",
                 "",
                 sim.reset],
+            "RESO": [
+                "RESO [method]",
+                "[txt]",
+                traf.asas.SetCRmethod
+            ],
+            "RSZONEDH": [
+                "RSZONEDH [height]",
+                "[float]",
+                traf.asas.SetPZHm
+            ],
+            "RSZONER": [
+                "RSZONER [radius]",
+                "[float]",
+                traf.asas.SetPZRm
+            ],
+            "SAVEIC": [
+                "SAVEIC filename",
+                "string",
+                lambda fname: self.saveic(fname, sim, traf)
+            ],
             "SCEN": [
                 "SCEN scenname",
-                "txt",
+                "string",
                 sim.scenarioInit
             ],
             "SEED": [
@@ -168,15 +321,51 @@ class Commandstack:
                 "",
                 sim.stop
             ],
-            "SYMBOL":  [
+            "SWRAD": [
+                "SWRAD GEO/GRID/APT/VOR/WPT/LABEL/ADSBCOVERAGE/TRAIL [dt]/[value]",
+                "txt,[float]",
+                scr.feature
+            ],
+            "SYMBOL": [
                 "SYMBOL",
                 "",
                 scr.symbol
             ],
+            "TAXI": [
+                "TAXI ON/OFF : OFF auto deletes traffic below 1500 ft",
+                "onoff",
+                traf.setTaxi
+            ],
+            "TRAIL": [
+                "TRAIL ON/OFF, [dt] OR TRAIL acid color",
+                "acid/bool,[float/txt]",
+                traf.setTrails
+            ],
+            "VNAV": [
+                "VNAV acid,[ON/OFF]",
+                "acid,[onoff]",
+                traf.setVNAV
+            ],
             "VS": [
                 "VS acid,vspd (ft/min)",
                 "acid,vspd",
-                traf.selvspd]
+                traf.selvspd],
+            "ZONEDH": [
+                "ZONEDH [height]",
+                "[float]",
+                traf.asas.SetPZH
+            ],
+            "ZONER": [
+                "ZONER [radius]",
+                "[float]",
+                traf.asas.SetPZR
+            ],
+            "ZOOM": [
+                "ZOOM IN/OUT or factor",
+                "float/txt",
+                lambda a: scr.zoom(1.4142135623730951) if a == "IN" else \
+                          scr.zoom(0.7071067811865475) if a == "OUT" else \
+                          scr.zoom(a, True)]
         }
 
         #--------------------------------------------------------------------
@@ -184,7 +373,10 @@ class Commandstack:
         self.cmdsynon = {
             "CONTINUE": "OP",
             "CREATE": "CRE",
-            "DTLOOK": "ASA_DTLOOK",
+            "DELETE": "DEL",
+            "DIRECTTO": "DIRECT",
+            "DIRTO": "DIRECT",
+            "DISP": "SWRAD",
             "END": "STOP",
             "EXIT": "STOP",
             "FWD": "FF",
@@ -199,10 +391,9 @@ class Commandstack:
         #--------------------------------------------------------------------
 
         self.cmdstack  = []
-        self.scentime  = []
         self.scenfile  = ""
-        self.scentime = []
-        self.scencmd = []
+        self.scentime  = []
+        self.scencmd   = []
 
         # Display Help text on start of program
         self.stack("ECHO BlueSky Console Window: Enter HELP or ? for info.\n" +
@@ -213,12 +404,12 @@ class Commandstack:
         self.stack("ZOOM 0.4")
 
         # ------------------ [start] Deprecated -------------------
-        # An alternative way to add your own commands: 
+        # An alternative way to add your own commands:
         # add your entry to the dictionary.
         # The dictionary should be formed as {"Key":module'}.
 
         # "Key" is a FOUR-symbol reference used at the start of command.
-        # 'module' is the name of the .py-file in which the 
+        # 'module' is the name of the .py-file in which the
         # commands are located (without .py).
 
         # Make sure that the module has a function "process" with
@@ -226,29 +417,29 @@ class Commandstack:
         #   command, number of args, array of args, sim, traf, scr, cmd
 
         self.extracmdmodules = {
-            "SYN_": 'synthetic', 
-            "ASA_":'asascmd', 
-           # "LOG_":'log' # Old logging module
+            "SYN_": 'synthetic'
         }
 
         # Import modules from the list
-        self.extracmdrefs={}
+        self.extracmdrefs = {}
         sys.path.append('bluesky/stack/')
         for key in self.extracmdmodules:
             obj=__import__(self.extracmdmodules[key],globals(),locals(),[],0)
             self.extracmdrefs[key]=obj
         # ------------------ [end] Deprecated -------------------
 
-        return
+    def append_commands(self, cmddict):
+        """ Append additional functions to the stack command dictionary """
+        self.cmddict.update(cmddict)
 
-    def help(self, cmd=None):
-        if cmd is None:
+    def help(self, cmd=''):
+        if len(cmd) == 0:
             text = "To get help on a command, enter it without arguments.\n" + \
-                   "Some basic commands are given below:\n\n"
+                   "The BlueSky commands are:\n\n"
             text2 = ""
             for key in self.cmddict:
                 text2 += (key + " ")
-                if len(text2) >= 40:
+                if len(text2) >= 60:
                     text += (text2 + "\n")
                     text2 = ""
             text += (text2 + "\nSee Info subfolder for more info.")
@@ -268,18 +459,15 @@ class Commandstack:
 
     def stack(self, cmdline):
         # Stack one or more commands separated by ";"
-        cline = cmdline.strip()  # remove leading & trailing spaces
-        if cline.count(";") == 0:
-            self.cmdstack.append(cline)
-        else:
-            clinelst = cline.split(";")
-            for line in clinelst:
+        cmdline = cmdline.strip()
+        if len(cmdline) > 0:
+            for line in cmdline.split(';'):
                 self.cmdstack.append(line)
 
-        return
-
-    def openfile(self, scenname, t_offset=0.0, mergeWithExisting=False):
-        scenlines = []
+    def openfile(self, scenname, absrel='ABS', mergeWithExisting=False):
+        # If timestamps in file should be interpreted as relative we need to add
+        # the current simtime to every timestamp
+        t_offset = self.sim.simt if absrel == 'REL' else 0.0
 
         # Add .scn extension if necessary
         if scenname.lower().find(".scn") < 0:
@@ -290,36 +478,12 @@ class Commandstack:
             scenfile = settings.scenario_path
             if scenfile[-1] is not '/':
                 scenfile += '/'
-            scenfile += scenname.lower()
+            scenfile += scenname
         else:
             scenfile = scenname
 
-        print "Reading scenario file: ", scenfile
-        print
-
         if not os.path.exists(scenfile):
-            print"Error: cannot find file:", scenfile
-            return
-
-        # Read lines into buffer
-        fscen = open(scenfile, 'r')
-        scenlines = fscen.readlines()
-        fscen.close()
-        i = 0
-        while i < len(scenlines):
-            if len(scenlines[i].strip()) <= 12 or scenlines[i][0] == "#":
-                del scenlines[i]
-            else:
-                i = i + 1
-
-        # Optional?
-        # scenlines.sort()
-
-        # Set timer until what is read
-        # tstamp = scenlines[0][:11]    # format - hh:mm:ss.hh
-        # ihr = int(tstamp[:2])
-        # imin = int(tstamp[3:5])
-        # isec = float(tstamp[6:8]+"."+tstamp[9:11])
+            return False, "Error: cannot find file: " + scenfile
 
         # Split scenario file line in times and commands
         if not mergeWithExisting:
@@ -329,34 +493,44 @@ class Commandstack:
             self.scentime = []
             self.scencmd  = []
 
-        for line in scenlines:
-            if line.strip()[0] != "#":
-                # Try reading timestamp and command
-                try:
-                    icmdline = line.index('>')
-                    tstamp = line[:icmdline]
-                    ttxt = tstamp.strip().split(':')
-                    ihr = int(ttxt[0])
-                    imin = int(ttxt[1])
-                    xsec = float(ttxt[2])
-                    self.scentime.append(ihr * 3600. + imin * 60. + xsec + t_offset)
-                    self.scencmd.append(line[icmdline + 1:-1])
-                except:
-                    print "except this:", line
-                    pass  # nice try, we will just ignore this syntax error
+        with open(scenfile, 'r') as fscen:
+            for line in fscen:
+                if len(line.strip()) > 12 and line[0] != "#":
+                    # Try reading timestamp and command
+                    try:
+                        icmdline = line.index('>')
+                        tstamp = line[:icmdline]
+                        ttxt = tstamp.strip().split(':')
+                        ihr = int(ttxt[0]) * 3600.0
+                        imin = int(ttxt[1]) * 60.0
+                        xsec = float(ttxt[2])
+                        self.scentime.append(ihr + imin + xsec + t_offset)
+                        self.scencmd.append(line[icmdline + 1:-1])
+                    except:
+                        print "except this:", line
+                        pass  # nice try, we will just ignore this syntax error
 
         if mergeWithExisting:
             # If we are merging we need to sort the resulting command list
             self.scentime, self.scencmd = [list(x) for x in zip(*sorted(
                 zip(self.scentime, self.scencmd), key=lambda pair: pair[0]))]
 
-    def pcall(self, filename, absrel='ABS'):
-        # If timestamps in file should be interpreted as relative we need to add
-        # the current simtime to every timestamp
-        t_offset = self.sim.simt if absrel == 'REL' else 0.0
+        return True
 
-        # Load the scenario file, and merge with existing command list
-        self.openfile(filename, t_offset, True)
+    def ic(self, scr, sim, filename=''):
+        if filename == '':
+            filename = scr.show_file_dialog()
+        elif filename == "IC":
+            filename = self.scenfile
+
+        if len(filename) > 0:
+            sim.reset()
+            result = self.openfile(filename)
+            if type(result) is bool:
+                self.scenfile = filename
+                return True, "Opened " + filename
+            else:
+                return result
 
     def checkfile(self, simt):
         # Empty command buffer when it's time
@@ -368,19 +542,18 @@ class Commandstack:
         return
 
     def saveic(self, fname, sim, traf):
-
         # Add extension .scn if not already present
-        if fname.find(".scn") < 0 and fname.find(".SCN"):
+        if fname.lower().find(".scn") < 0:
             fname = fname + ".scn"
 
         # If it is with path don't touch it, else add path
         if fname.find("/") < 0:
-            scenfile = "./scenario/" + fname.lower()
+            scenfile = "./scenario/" + fname
 
         try:
             f = open(scenfile, "w")
         except:
-            return -1
+            return False, "Error writing to file"
 
         # Write files
         timtxt = "00:00:00.00>"
@@ -438,7 +611,7 @@ class Commandstack:
 
         # Saveic: should close
         f.close()
-        return 0
+        return True
 
     def process(self, sim, traf, scr):
         """process and empty command stack"""
@@ -449,1174 +622,225 @@ class Commandstack:
             if len(line) == 0:
                 continue
 
-            # Debug
-            # print "CMD:",line
-
-            cmdline = line.upper()  # Save original lower case in variable line
-
-            cmdargs = cmdsplit(cmdline)
-
-            cmd = cmdargs[0]
-
-            numargs = len(cmdargs) - 1
-
-            # First check for alternate syntax: acid cmd args 2-3
-            if traf.id.count(cmd) > 0:
-                if numargs >= 1:
-                    acid = cmd
-                    cmd = cmdargs[1]
-                    cmdargs[1] = acid
-                    cmdargs[0] = cmd
-                else:
-                    cmdargs = ['POS', cmd]
-                    cmd     = 'POS'
-                    numargs = 1
+            # Split command line into command and arguments, pass traf ids to check for
+            # switched acid and command
+            cmd, args = cmdsplit(line.upper(), traf.id)
+            numargs   = len(args)
+            # Check if this is a POS command with only an aircraft id
+            if numargs == 0 and traf.id.count(cmd) > 0:
+                args    = [cmd]
+                cmd     = 'POS'
+                numargs = 1
 
             # Assume syntax is ok (default)
             synerr = False
 
-            # Catch general errors
-#            try:
-            if True:  # optional to switch error protection off
-
-                #**********************************************************************
-                #=====================  Start of command branches =====================
-                #**********************************************************************
-
-                #----------------------------------------------------------------------
-                # First check command synonymes list, then in dictionary
-                #----------------------------------------------------------------------
-                if cmd in self.cmdsynon.keys():
-                    cmd = self.cmdsynon[cmd]
-
-                if cmd in self.cmddict.keys():
-                    helptext, argtypelist, function = self.cmddict[cmd]
-                    argvsopt = argtypelist.split('[')
-                    argtypes = argvsopt[0].strip(',').split(",")
-                    if argtypes == ['']:
-                        argtypes = []
-
-                    # Check if at least the number of mandatory arguments is given.
-                    if numargs < len(argtypes):
-                        print numargs, len(argtypes)
-                        scr.echo("Syntax error: Too few arguments")
-                        scr.echo(cmdline)
-                        scr.echo(helptext)
-                        continue
-
-                    # Add optional argument types if they are given
-                    if len(argvsopt) == 2:
-                        argtypes += argvsopt[1].strip(']').split(',')
-                    numtypes = len(argtypes)
-
-                    # Process arg list
-                    arglist = []
-                    idx     = -1          # Reference aircraft
-                    refalt  = 0.          # Reference altitude
-                    reflat  = scr.ctrlat  # Reference latitude
-                    reflon  = scr.ctrlon  # Reference longitude
-                    try:
-                        for i in range(1, 1 + min(numtypes, numargs)):
-                            argtype = argtypes[i-1].strip()
-
-                            if cmdargs[i] == "" or cmdargs[i] == "*":  # Empty arg or wildcard => parse None
-                                arglist.append(None)
-
-                            elif argtype == "acid":  # aircraft id => parse index
-
-                                idx = traf.id2idx(cmdargs[i])
-                                if idx < 0:
-                                    scr.echo(cmd + ":" + cmdargs[i] + " not found")
-                                    synerr = True
-                                    break
-                                else:
-                                    arglist.append(idx)
-
-                            elif argtype == "txt":  # simple text
-                                arglist.append(cmdargs[i])
-
-                            elif argtype == "float":  # float number
-                                arglist.append(float(cmdargs[i]))
-
-                            elif argtype == "int":   # integer
-                                arglist.append(int(cmdargs[i]))  # switch
-
-                            elif argtype == "onoff" or argtype == "bool":
-                                sw = (cmdargs[i] == "ON" or
-                                      cmdargs[i] == "1" or cmdargs[i] == "TRUE")
-                                arglist.append(sw)
-
-                            elif argtype == "lat":
-                                try:
-                                    reflat = txt2lat(cmdargs[i])
-                                    arglist.append(float(reflat))
-                                except:
-                                    synerr = True
-
-                            elif argtype == "lon":
-                                try:
-                                    reflon = txt2lon(cmdargs[i])
-                                    arglist.append(float(reflon))
-                                except:
-                                    synerr = True
-
-                            elif argtype == "spd":  # CAS[kts] Mach
-                                spd = float(cmdargs[i].upper().replace("M", ".").replace("..", "."))
-                                if not 0.1 < spd < 1.0:
-                                    spd *= kts
-                                arglist.append(spd)  # speed CAS[m/s] or Mach (float)
-
-                            elif argtype == "vspd":
-                                arglist.append(fpm * float(cmdargs[i]))
-
-                            elif argtype == "alt":  # alt: FL250 or 25000 [ft]
-                                arglist.append(ft * txt2alt(cmdargs[i]))  # alt in m
-
-                            elif argtype == "hdg":
-                                # TODO: for now no difference between magnetic/true heading
-                                hdg = float(cmdargs[i].upper().replace('T', '').replace('M', ''))
-                                arglist.append(hdg)
-
-                            elif argtype == "time":
-                                ttxt = cmdargs[i].strip().split(':')
-                                if len(ttxt) >= 3:
-                                    ihr  = int(ttxt[0])
-                                    imin = int(ttxt[1])
-                                    xsec = float(ttxt[2])
-                                    arglist.append(ihr * 3600. + imin * 60. + xsec)
-                                else:
-                                    arglist.append(float(cmdargs[i]))
-
-                    except:
-                        synerr = False
-                        scr.echo("Syntax error in processing arguments")
-                        scr.echo(cmdline)
-                        scr.echo(helptext)
-
-                    # Call function return flag,text
-                    # flag: indicates sucess
-                    # text: optional error message
-#                    try:
-                    results = function(*arglist)  # * = unpack list to call arguments
-#                    except:
-#                        synerr = True
-                    txt = helptext
-                    if not synerr:
-
-                        if type(results) == bool:  # Only flag is returned
-                            synerr = not results
-                            if synerr:
-                                if numargs <= 0 or cmdargs[i] == "?":
-                                    scr.echo(helptext)
-                                else:
-                                    scr.echo("Syntax error: " + helptext)
-                                synerr =  False  # Prevent further nagging
-
-                        elif type(results) == list or type(results) == tuple:
-                            # Maybe there is also an error message returned?
-                            if len(results) >= 1:
-                                synerr = not results[0]
-
-                            if len(results) >= 2:
-                                scr.echo(cmd+":"+results[1])
-                                synerr = False
-
-                    else:  # synerr:
-                        scr.echo("Syntax error: " + helptext)
-
-                #----------------------------------------------------------------------
-                # POS command: traffic info; ("KL204", "POS KL204" or "KL204 ?")
-                #----------------------------------------------------------------------
-                elif cmd == "POS" or cmd == "?":
-                    if numargs >= 1:
-                        acid = cmdargs[1]
-
-                        # Does aircraft exist?
-                        idx = traf.id2idx(acid)
-                        if idx < 0:
-                            scr.echo("POS: " + acid + " not found.")
-
-                        # print info on aircraft if found
-                        else:
-                            scr.echo("Info on " + acid + " " + traf.type[idx]+\
-                                                          "   index = " + str(idx))
-                            taskts = int(round(traf.tas[idx]/kts))                              
-                            caskts = int(round(tas2cas(traf.tas[idx],traf.alt[idx])/kts))                              
-                            scr.echo("Pos = " + str(traf.lat[idx])+" , "+str(traf.lon[idx]))
-                            scr.echo(str(caskts)+" kts (TAS: "+str(taskts)+" kts) at " \
-                                     + str(int(traf.alt[idx] / ft)) + " ft")
-                            scr.echo("Hdg = " + str(int(traf.trk[idx])))
-                            if traf.swvnav[idx]:
-                                vnavtxt = "VNAV "
-                            else:
-                                vnavtxt = ""
-                            if traf.swlnav[idx] and traf.route[idx].nwp>0 and  \
-                               traf.route[idx].iactwp>=0:
-                                 scr.echo(vnavtxt + "LNAV to "+   \
-                                  traf.route[idx].wpname[traf.route[idx].iactwp])
-                            
-                            txt = "Flying"
-                            if traf.orig[idx]!="":
-                                txt = txt + " from "+traf.orig[idx]
-                            if traf.dest[idx]!="":
-                                txt = txt + " to "+traf.dest[idx]
-                            if len(txt)>0:
-                                scr.echo(txt)
-
-                        # Show route for this aircraft (toggle switch)
-                        scr.showroute(acid)
-
-                    else:
-                         synerr = True
-
-                #----------------------------------------------------------------------
-                # DEL: Delete command: delete an aircraft
-                #----------------------------------------------------------------------
-                elif cmd == "DEL":
-                    if numargs == 1:
-                        if cmdargs[1] == "LINE" or cmdargs[1] == "LINES":
-                            scr.objdel()  # delete raw objects
-                        else:
-                            success = traf.delete(cmdargs[1].upper())
-                            if not success:
-                                scr.echo("DEL: " + cmdargs[1] + " not found.")
-
-                #----------------------------------------------------------------------
-                # DEST/ORIG: Destination/Origin command: set destination/origin airport
-                #----------------------------------------------------------------------
-                elif cmd == "DEST" or cmd == "ORIG":
-                    if numargs==0:
-                        scr.echo(cmd+" acid, airport")
-                    elif numargs >=1:
-                        acid = cmdargs[1]
-                        idx = traf.id2idx(acid)
-                        if idx>=0 and numargs==1:
-                            if cmd=="DEST":
-                                scr.echo("DEST "+acid+": "+traf.dest[idx])                            
-                            else:
-                                scr.echo("ORIG "+acid+": "+traf.orig[idx])                            
-                            
-                        elif idx >= 0 and numargs>=2:
-                            name = cmdargs[2]
- 
-                           # Check for lat/lon type
-                            if numargs>=3:
-                                chkdig = cmdargs[2].replace("-","")     \
-                                       .replace("+","").replace(".","") \
-                                       .replace("N","").replace("S","") \
-                                       .replace("E","").replace("W","") \
-                                       .replace("'","").replace('"',"") 
-
-                                if chkdig.isdigit():
-          
-                                        name    = traf.id[idx]+cmd # use for wptname
-                                        if cmd=="DEST":
-                                            wptype  = traf.route[idx].dest
-                                        else:
-                                            wptype  = traf.route[idx].orig
-                                           
-                                        lat     = txt2lat(cmdargs[2])
-                                        lon     = txt2lon(cmdargs[3])
- 
-                              
-                            # Destination is default waypoint
-                            if cmd == "DEST":
-                                traf.dest[idx] = name.upper().strip()
-                                iwp = traf.route[idx].addwpt(traf,idx,traf.dest[idx],
-                                                             traf.route[idx].dest,
-                                                             traf.lat[idx], traf.lon[idx],
-                                                             0.0, traf.cas[idx])
-                                # If only waypoint: activate
-                                if (iwp == 0) or (traf.orig[idx]!="" and traf.route[idx].nwp==2):
-                                     traf.actwplat[idx] = traf.route[idx].wplat[iwp]
-                                     traf.actwplon[idx] = traf.route[idx].wplon[iwp]
-                                     traf.actwpalt[idx] = traf.route[idx].wpalt[iwp]
-                                     traf.actwpspd[idx] = traf.route[idx].wpspd[iwp]
-
-                                     traf.swlnav[idx] = True
-                                     traf.route[idx].iactwp = iwp
-
-                                # If not found, say so
-                                elif iwp < 0:
-                                     scr.echo(traf.dest[idx] + " not found.")
-
-                            # Origin: bookkeeping only for now
-                            else:
-                                traf.orig[idx] = name.upper().strip()
-                                iwp = traf.route[idx].addwpt(traf,idx,traf.orig[idx],traf.route[idx].orig,
-                                                 traf.lat[idx], traf.lon[idx],
-                                                          0.0, traf.cas[idx])
-                                if iwp < 0:
-                                     scr.echo(traf.orig[idx] + " not found.")
-                        # Give destination and origin
-                        elif idx >=0 and numargs==1:
-                            txt = ""
-                            if traf.orig[idx]!="":
-                                txt = txt + " from "+traf.orig[idx]
-                            if traf.dest[idx]!="":
-                                txt = txt + " to "+traf.dest[idx]
-                            if len(txt)>0:
-                                scr.echo(traf.id[idx]+txt)
-                            else:
-                                scr.echo(traf.id[idx]+": orig and dest not defined.")
-
-                        else:
-                            scr.echo(cmd + ": aircraft " + acid + " not found.")
-                    else:
-                        synerr = True
-
-                #----------------------------------------------------------------------
-                # ZOOM command (or use ++++  or --  to zoom in or out)
-                #----------------------------------------------------------------------
-                elif cmd[:4] == "ZOOM" or cmd[0] == "+" or cmd[0] == "=" or cmd[0] == "-":
-                    if cmd[0] != "Z":
-                        nplus = cmd.count("+") + cmd.count("=")  #= equals + (same key)
-                        nmin = cmd.count("-")
-                        zoomfac = sqrt(2) ** nplus / (sqrt(2) ** nmin)
-                        scr.zoom(zoomfac)
-                    else:
-                        synerr = not(len(cmdargs) == 2)
-                        if not synerr:
-                            if cmdargs[1] == "IN":
-                                scr.zoom(1.4142135623730951)  # sqrt(2.)
-
-                            elif cmdargs[1] == "OUT":
-                                scr.zoom(0.70710678118654746)  #1./sqrt(2.)
-                            else:
-                                try:
-                                    zoomfac = float(cmdargs[1])
-                                    scr.zoom(zoomfac, True)
-                                except:
-                                    synerr = True
-
-                        if synerr:
-                            print "Syntax error in command"
-                            scr.echo("Syntax error in command")
-                            scr.echo("ZOOM IN/OUT")
-                            continue  # Skip default syntyax message
-
-                #----------------------------------------------------------------------
-                # PAN command
-                #----------------------------------------------------------------------
-                elif cmd[:4] == "PAN":
-
-                    if not (numargs == 1 or numargs == 2):
-                        if numargs>0:
-                            scr.echo("Syntax error in command")
-                        scr.echo("PAN LEFT/RIGHT/UP/DOWN/acid/airport/navid")
-                        continue
-
-                    # LEFT/RIGHT/UP/DOWN
-                    elif numargs == 1:
-                        if cmdargs[1] == "LEFT":
-                            scr.pan((0.0, -0.5)) # move half screen left
-                            continue
-                        elif cmdargs[1] == "RIGHT":
-                            scr.pan((0.0, 0.5)) # move half screen right
-                            continue
-
-                        elif cmdargs[1] == "UP":
-                            scr.pan((0.5, 0.0))  # move half screen up
-                            continue
-
-                        elif cmdargs[1] == "DOWN":
-                            scr.pan((-0.5, 0.0)) # move half screen down
-                            continue
-                        else:
-                            # Try aicraft id, waypoint of airport
-                            i = traf.id2idx(cmdargs[1])
-                            if i >= 0:
-                                lat = traf.lat[i]
-                                lon = traf.lon[i]
-                                if (np.isnan(lat) or np.isnan(lon)):
-                                    continue
-                            else:
-                                i = traf.navdb.getwpidx(cmdargs[1], 0.0, 0.0)  # TODO: get current pan from display?
-                                if i >= 0:
-                                    lat = traf.navdb.wplat[i]
-                                    lon = traf.navdb.wplon[i]
-                                    if (np.isnan(lat) or np.isnan(lon)):
-                                        continue
-                                else:
-                                    i = traf.navdb.getapidx(cmdargs[1])
-                                    if i >= 0:
-                                        lat = traf.navdb.aplat[i]
-                                        lon = traf.navdb.aplon[i]
-                                        if (np.isnan(lat) or np.isnan(lon)):
-                                            continue
-                                    else:
-                                        synerr= True
-                                        scr.echo(cmdargs[1] + " not found.")
-                            if not synerr and (not (np.isnan(lat) or np.isnan(lon))):
-                                scr.pan((lat, lon), absolute=True)
-
-                    # PAN to lat,lon position
-                    elif numargs == 2:
-                        lat = float(cmdargs[1])
-                        lon = float(cmdargs[2])
-
-                        if not (np.isnan(lat) or np.isnan(lon)):
-                            scr.pan((lat, lon), absolute=True)
-
-#
-
-                #----------------------------------------------------------------------
-                # IC scenfile: command: restart with new filename (.scn will be added if necessary)
-                # IC IC: same file
-                #----------------------------------------------------------------------
-                elif cmd == "IC":
-                    sim.reset()
-                    # If no arg is given: check
-                    if numargs >= 1:
-                        # Use lower case line for filename and allow space in path
-                        filename = line.strip()[3:].strip()
-                        if filename.upper() == "IC":  # same file
-                            filename = self.scenfile
-
-                        if filename.strip() != "":
-                            scr.echo("Opening " + filename + " ...")
-
-                        # Open file in ./scenario subfolder
-
-                        self.scenfile = filename
-                        self.openfile(self.scenfile)
-
-                    else:
-
-                        filename = scr.show_file_dialog()
-                        if len(filename) > 0:
-                            self.scenfile = filename
-                            self.openfile(self.scenfile)
-
-                #----------------------------------------------------------------------
-                # SAVE/SAVEIC Save current traffic situation as IC scn file
-                #----------------------------------------------------------------------
-                elif cmd == "SAVEIC":
-                    if numargs <= 0:
-                        scr.echo("SAVEIC needs filename")
-                    else:
-                        errcode = self.saveic(cmdargs[1], sim, traf)
-                        if errcode == -1:
-                            scr.echo("SAVEIC: Error writing file")
-
-                #----------------------------------------------------------------------
-                # METRICS command: METRICS/METRICS OFF/0/1/2 [dt]  analyze traffic complexity metrics
-                #----------------------------------------------------------------------
-                elif cmd[:6] == "METRIC":
-                    if sim.metric is None:
-                        scr.echo("METRICS module disabled")
-
-                    elif numargs < 1:
-                        if sim.metric.metric_number < 0:
-                            scr.echo("No metric active, to configure run:")
-                            scr.echo("METRICS OFF/0/1/2 [dt]")
-                        else:
-                            scr.echo("")
-                            scr.echo("Active: " + "(" + str(sim.metric.metric_number + 1) + ") " + sim.metric.name[
-                                sim.metric.metric_number])
-                            scr.echo("Current dt: " + str(sim.metric.dt) + " s")
-
-                    elif cmdargs[1] == "OFF":  # arguments are strings
-                        sim.metric.metric_number = -1
-                        scr.echo("Metric is off")
-
-                    else:
-                        if not cmdargs[1][1:].isdigit():
-                            # print cmdargs[1][1:].isdigit()
-                            scr.echo("Command argument invalid")
-                            return
-                        sim.metric.metric_number = int(cmdargs[1]) - 1
-                        if sim.metric.metric_number < 0:
-                            scr.echo("Metric is off")
-                        elif sim.metric.metric_number <= len(sim.metric.name):
-                            if traf.area == "Circle":
-                                scr.echo("(" + str(sim.metric.metric_number + 1) + ") " + sim.metric.name[
-                                    sim.metric.metric_number] + " activated")
-                                try:
-                                    metric_dt = float(cmdargs[2])
-                                    if metric_dt > 0:
-                                        sim.metric.dt = metric_dt
-                                        scr.echo("with dt = " + str(metric_dt))
-                                    else:
-                                        scr.echo("No valid dt")
-                                except:
-                                    scr.echo("with dt = " + str(sim.metric.dt))
-                            else:
-                                scr.echo("First define AREA FIR")
-                        else:
-                            scr.echo("No such metric")
-
-                #----------------------------------------------------------------------
-                # AREA command: AREA lat0,lon0,lat1,lon1[,lowalt]
-                #               AREA FIR fir radius [lowalt]
-                #----------------------------------------------------------------------
-                elif cmd == "AREA":
-                    
-                    # debugger
-#                    pdb.set_trace()                    
-                    
-                    if numargs == 0:
-                        scr.echo("AREA lat0,lon0,lat1,lon1[,lowalt]")
-                        scr.echo("or")
-                        scr.echo("AREA fir,radius[,lowalt]")
-                        scr.echo("or")
-                        scr.echo("AREA circle,lat0,lon0,radius[,lowalt] ")
-                    elif numargs == 1 and cmdargs[1] != "OFF" and cmdargs[1] != "FIR":
-                        scr.echo("AREA lat0,lon0,lat1,lon1[,lowalt]")
-                        scr.echo("or")
-                        scr.echo("AREA fir,radius[,lowalt]")
-                        scr.echo("or")
-                        scr.echo("AREA circle,lat0,lon0,radius[,lowalt] ")
-                        
-                    elif numargs == 1:
-                        if cmdargs[1] == "OFF":
-                            if traf.swarea:
-                                traf.swarea = False
-                                scr.redrawradbg = True
-                                traf.area = ""
-                                scr.objappend(2, "AREA", None) # delete square areas
-                                scr.objappend(3, "AREA", None) # delete circle areas
-                        if cmdargs[1] == "FIR":
-                            scr.echo("Specify FIR")
-
-                    elif numargs > 1 and cmdargs[1][0].isdigit():
-
-                        lat0 = float(cmdargs[1])  # [deg]
-                        lon0 = float(cmdargs[2])  # [deg]
-                        lat1 = float(cmdargs[3])  # [deg]
-                        lon1 = float(cmdargs[4])  # [deg]
-
-                        traf.arealat0 = min(lat0, lat1)
-                        traf.arealat1 = max(lat0, lat1)
-                        traf.arealon0 = min(lon0, lon1)
-                        traf.arealon1 = max(lon0, lon1)
-
-                        if numargs == 5:
-                            traf.areafloor = float(cmdargs[5]) * ft
-                        else:
-                            traf.areafloor = -9999999.
-
-                        traf.area = "Square"
-                        traf.swarea = True
-                        scr.redrawradbg = True
-                        scr.objappend(2, "AREA", [lat0, lon0, lat1, lon1])
-
-                        # Avoid mass delete due to redefinition of area
-                        traf.inside = traf.ntraf * [False]
-
-                    elif numargs > 2 and cmdargs[1] == "FIR":
-
-                        for i in range(0, len(traf.navdb.fir)):
-                            if cmdargs[2] == traf.navdb.fir[i][0]:
-                                break
-                        if cmdargs[2] != traf.navdb.fir[i][0]:
-                            scr.echo("Unknown FIR, try again")
-                        if sim.metric is not None:
-                            sim.metric.fir_number = i
-                            sim.metric.fir_circle_point = sim.metric.metric_Area.FIR_circle(traf.navdb, sim.metric.fir_number)
-                            sim.metric.fir_circle_radius = float(cmdargs[3])
-                        else:
-                            scr.echo("warning: FIR not loaded into METRICS module because not active")
-
-                        if numargs == 4:
-                            traf.areafloor = float(cmdargs[4]) * ft
-                        else:
-                            traf.areafloor = -9999999.
-                        if numargs > 4:
-                            scr.echo("AREA command unknown")
-
-                        traf.area = "Circle"
-                        traf.swarea = True
-                        scr.drawradbg()
-                        traf.inside = traf.ntraf * [False]
-                    
-                    # circle code
-                    elif (numargs > 2 and cmdargs[1] == "CIRCLE"):
-                        
-                        # draw circular experiment area
-                        lat0 = np.float(cmdargs[2])   # Latitude of circle center [deg]
-                        lon0 = np.float(cmdargs[3])   # Longitude of circle center [deg]
-                        radius = np.float(cmdargs[4]) # Radius of circle Center [NM]                      
-                                               
-                        # Deleting traffic flying out of experiment area
-                        traf.area = "Circle"
-                        traf.swarea = True
-                        traf.arearadius = radius
-                        traf.arealat0 = lat0 # center of circle sent to traf
-                        traf.arealon0 = lon0
-                        
-                        if numargs == 5:
-                            traf.areafloor = float(cmdargs[5]) * ft # [m]
-                        else:
-                            traf.areafloor = -9999999. # [m]
-                            
-                        # draw the circular experiment area on the radar gui  
-                        scr.redrawradbg = True                        
-                        scr.objappend(3, "AREA", [lat0,lon0,radius])
-                        
-                        # Avoid mass delete due to redefinition of area
-                        traf.inside = traf.ntraf * [False]
-                        
-                     
-                    else:
-                        scr.echo("AREA command unknown")
-                        scr.echo("AREA lat0,lon0,lat1,lon1[,lowalt]")
-                        scr.echo("or")
-                        scr.echo("AREA fir,radius[,lowalt]")
-                        scr.echo("or")
-                        scr.echo("AREA circle,lat0,lon0,radius[,lowalt] ")
-
-                #----------------------------------------------------------------------
-                # TAXI command: TAXI ON/OFF : if off, 
-                #   autodelete descending aircraft below 1500 ft
-                #----------------------------------------------------------------------
-                elif cmd == "TAXI":
-                    if numargs == 0:
-                        scr.echo("TAXI ON/OFF : OFF auto deletes traffic below 1500 ft")
-                    else:
-                        arg1 = cmdargs[1].upper()  # arguments are strings
-                        traf.swtaxi = (arg1[:2] == "ON")
-
-                #----------------------------------------------------------------------
-                # SWRAD command: display switches of radar display
-                # SWRAD GEO / GRID / APT / VOR / WPT / LABEL (toggle on/off or cycle)
-                # (for WPT,APT,LABEL value is optional)
-                #----------------------------------------------------------------------
-                elif cmd == "SWRAD" or cmd[:4] == "DISP":
-                    if numargs == 0:
-                        scr.echo("SWRAD GEO / GRID / APT / VOR / " + \
-                                 "WPT / LABEL / TRAIL [dt] / [value]")
-                    else:
-                        sw = cmdargs[1] # Which switch
-
-                        if numargs==2:
-                            arg = cmdargs[2] # optional argument
-                        else:
-                            arg = ""
-
-                        # FIR boundaries
-                        if sw == "TRAIL" or sw == "TRAILS":
-
-                            traf.swtrails = not traf.swtrails
-                            if numargs == 2:
-                                try:
-                                    trdt = float(cmdargs[2])
-                                    traf.trails.dt = trdt
-                                except:
-                                    scr.echo("TRAIL ON dt")
-
-                        elif scr.feature(sw,arg): # Toggle screen feature                        
-                              scr.drawradbg() # When success: Force redraw radar background
-
-                        else:
-                            scr.redrawradbg = False # Switch not found
-
-                #----------------------------------------------------------------------
-                # TRAILS ON/OFF
-                #----------------------------------------------------------------------
-                elif cmd[:5] == "TRAIL":
-                    if numargs == 0:
-                        scr.echo("TRAIL ON/OFF [dt]/TRAIL acid color")
-                        if traf.swtrails:
-                            scr.echo("Trails are currently ON")
-                            scr.echo("Trails dt=" + str(traf.trails.dt))
-                        else:
-                            scr.echo("Trails are currently OFF")
-                    else:
-                        if cmdargs[1] == "ON":
-                            traf.swtrails = True
-                            if numargs == 2:
-                                try:
-                                    trdt = float(cmdargs[2])
-                                    traf.trails.dt = trdt
-                                except:
-                                    scr.echo("TRAIL ON dt")
-
-                        elif cmdargs[1] == "OFF" or cmdargs[1] == "OF":
-                            traf.swtrails = False
-                            traf.trails.clear()
-
-                        elif len(cmdargs[1]) != 0:
-                            correctCommand = True
-                            # Check if a color was selected
-                            if len(cmdargs) == 2:
-                                scr.echo('Syntax error')
-                                scr.echo("TRAIL acid color")
-                                correctCommand = False
-
-                            if correctCommand:
-                                acid = cmdargs[1]
-                                color = cmdargs[2]
-
-                                # Does aircraft exist?
-                                idx = traf.id2idx(acid)
-                                if idx < 0:
-                                    scr.echo("TRAILS: " + acid + " not found.")
-                                    idx = -1
-                                
-                                # Does the color exist?
-                                if color not in ("BLUE", "RED", "YELLOW"):
-                                    scr.echo("Color not found, use BLUE, RED or YELLOW")
-                                    idx = -1
-
-                                # Change trail color of aircraft for which there are data
-                                if idx >= 0:
-                                    traf.changeTrailColor(color, idx)
-                                    # scr.echo("TRAIL color of " + acid + " switched to: " + color)
-                        else:
-                            scr.echo('Syntax error')
-                            scr.echo("TRAILS ON/OFF")
-
-                #----------------------------------------------------------------------
-                # DIST lat1,lon1,lat2,lon2 : 
-                #   calculate distance and direction from one pos to 2nd
-                #----------------------------------------------------------------------
-                elif cmd[:4] == "DIST":
-                    if numargs == 0:
-                        scr.echo("DIST lat1,lon1,lat2,lon2")
-                    else:
-                        try:
-                            lat0 = float(cmdargs[1])  # lat 1st pos
-                            lon0 = float(cmdargs[2])  # lon 1st pos
-                            lat1 = float(cmdargs[3])  # lat 2nd pos
-                            lon1 = float(cmdargs[4])  # lon 2nd pos
-                            qdr, d = qdrdist(lat0, lon0, lat1, lon1)
-                            scr.echo("Dist = " + str(round(d,3)) + \
-                                 " nm   QDR = " + str(round(qdr,2)) + " deg")
-                        except:
-                            scr.echo("DIST: Syntax error")
-                
-                #----------------------------------------------------------------------
-                # CALC  expression
-                #----------------------------------------------------------------------
-                elif cmd[:4] == "CALC":
-                    if numargs == 0:
-                        scr.echo("CALC expression")
-                    else:
-                        try:
-                            x = eval(cmdline[5:].lower())  # lower for units!
-                            scr.echo("Ans = " + str(x))
-                        except:
-                            scr.echo("CALC: Syntax error")
-
-                #----------------------------------------------------------------------
-                # LNAV acid ON/OFF   Switch LNAV (HDG FMS navigation) on/off
-                #----------------------------------------------------------------------
-                elif cmd == "LNAV":
-                    if numargs == 0:
-                        scr.echo("LNAV acid, ON/OFF")
-                    else:
-                        idx = traf.id2idx(cmdargs[1])
-
-                        if idx<0:
-                            if cmdargs[1]=="*":  # all aircraft
-                               if cmdargs[2].upper() == "ON":
-                                   traf.swlnav = np.array(traf.ntraf*[True])
-                               elif cmdargs[2].upper() == "OFF":
-                                   traf.swlnav = np.array(traf.ntraf*[False])
-                               else:
-                                   synerr = True
-                            else:
-                                scr.echo(cmdargs[1]+"not found")
-                        else:
-                            acid = traf.id[idx]
-                            if numargs ==1:
-                                if traf.swlnav[idx] == "ON":
-                                    scr.echo(acid+": LNAV ON")
-                                else:
-                                    scr.echo(acid+": LNAV OFF")
-
-                            else:
-                                if cmdargs[2].upper() == "ON":
-                                    if traf.route[idx].nwp > 0: # If there are any waypoints defined
-                                        traf.swlnav[idx] = True
-        
-                                        iwp = traf.route[idx].findact(traf,idx)
-                                        traf.route[idx].direct(traf, idx, traf.route[idx].wpname[iwp])
-                                    else:
-                                        scr.echo("LNAV "+acid+": no waypoints or destination specified")
-    
-                                elif cmdargs[2].upper() == "OFF":
-                                    traf.swlnav[idx] = False
-
-                #----------------------------------------------------------------------
-                # VNAV acid ON/OFF  Switch VNAV (SPD+ALT FMS navigation)  on/off
-                #----------------------------------------------------------------------
-                elif cmd == "VNAV":
-                    if numargs == 0:
-                        scr.echo("VNAV acid, ON/OFF")
-                    else:
-                        idx = traf.id2idx(cmdargs[1])
-                        if idx<0:
-                            if cmdargs[1]=="*":  # all aircraft
-                               if cmdargs[2].upper() == "ON": # Only when LNAV is on!
-                                   traf.swvnav = np.array(traf.ntraf*[True])*traf.swlnav
-                               elif cmdargs[2].upper() == "OFF":
-                                   traf.swvnav = np.array(traf.ntraf*[False])
-                               else:
-                                   synerr = True
-                            else:
-                                scr.echo(cmdargs[1]+"not found")
-
-                        elif numargs ==1:
-
-                            acid = traf.id[idx]
-                            if traf.swvnav[idx] == "ON":
-                               scr.echo(acid+": VNAV ON")
-                            else:
-                                scr.echo(acid+": VNAV OFF")
-
-                        else:
-                            acid = traf.id[idx]
-                            if cmdargs[2].upper() == "ON":
-                                if not traf.swlnav[idx]:   
-                                    scr.echo(acid+": VNAV ON requires LNAV to be ON")
-                                else:
-                                    traf.swvnav[idx] = True
-                                    # Activate AP setting by pressing Direct again
-                                    if traf.route[idx].nwp>0: 
-                                        traf.route[idx].direct( traf , idx,  \
-                                           traf.route[idx].wpname[traf.route[idx].iactwp])
-
-                            elif cmdargs[2].upper() == "OFF":
-                                traf.swvnav[idx] = False
-                            else:
-                                synerr = True
-
-                #----------------------------------------------------------------------
-                # ASAS ON/OFF  : switch ASAS on/off
-                #----------------------------------------------------------------------
-                elif cmd == "ASAS":
-                    if numargs == 0:
-                        scr.echo("ASAS ON/OFF")
-                        if traf.dbconf.swasas:
-                            scr.echo("ASAS is currently ON")
-                        else:
-                            scr.echo("ASAS is currently OFF")
-                    else:
-                        arg1 = cmdargs[1]  # arguments are strings
-                        traf.dbconf.swasas = (arg1.upper() =="ON")
-                            
-                #----------------------------------------------------------------------
-                # ADDWPT   : ADDWPT acid,(WPname / lat,lon),[alt],[spd],[afterwp]
-                #----------------------------------------------------------------------
-                elif cmd == "ADDWPT":
-             
-                    if numargs <= 1:
-                        scr.echo( \
-                        "ADDWPT acid, (wpname/lat,lon),[alt],[spd],[afterwp]")
-                    
-                    else:
-                        acid = cmdargs[1]     # call sign
-                           
-                        i = traf.id2idx(cmdargs) # Get index of this a/c
-                        if traf.id2idx(cmdargs[1])<0:
-                            scr.echo("ADDWPT: Aircraft "+cmdargs[1]+" not found.")
-                        else:
-                            rte = traf.route[i]   # Get pointer to route object
-
-                            # Default values
-                            wpok =  False
-                            alt = -999
-                            spd = -999
-                            afterwp = ""
-                            
-                            # Check for fly-by/fly-over switch per aircraft route
-                            wpid = cmdargs[2]                            
-                            if wpid=="FLYBY" or wpid=="FLY-BY":
-                                traf.route[i].swflyby = True
-                            elif wpid=="FLYOVER" or wpid=="FLY-OVER":
-                                traf.route[i].swflyby = False
-                            else:
-
-                                if True: #try:
-    
-                                    # Get waypoint data
-                                    # Is arg 2 a number? => lat,lon else waypoint name
-                                    chkdig = cmdargs[2].replace("-","")  \
-                                       .replace("+","").replace(".","")\
-                                       .replace("N","").replace("S","")\
-                                       .replace("E","").replace("W","")\
-                                       .replace("'","").replace('"',"")
-
-                                    if numargs>=3 and chkdig.isdigit():
-          
-                                        name    = traf.id[i] # use for wptname
-                                        wptype  = rte.wplatlon
-                                        lat     = txt2lat(cmdargs[2])
-                                        lon     = txt2lon(cmdargs[3])
-                                        if numargs>=4 and cmdargs[4]!="":
-                                            alt = txt2alt(cmdargs[4])*ft
-                                        if numargs>=5 and cmdargs[5]!="":
-                                            spd = txt2spd(cmdargs[5],max(alt,traf.alt[i]))
-                                        if numargs>=6:
-                                            afterwp = cmdargs[6]
-                                            if rte.wpname.count(afterwp)==0:
-                                                scr.echo("Waypoint "+afterwp+" not found. "+
-                                                "Waypoint added at end of route.")
-                                                afterwp = ""
-                                        
-                                        wpok    = True
-
-                                    # Is arg navaid/airport/waypoint name?
-                                    elif numargs>=2:
-                                        name    = cmdargs[2]  # search this wpname closest to
-                                        wptype  = rte.wpnav
-                                        lat     = traf.lat[i]  # a/c position as reference lat,lon 
-                                        lon     = traf.lon[i]
-                                        if numargs>=3 and cmdargs[3]!="":
-                                            alt = txt2alt(cmdargs[3])*ft
-                                        if numargs>=4 and cmdargs[4]!="":
-                                            spd = txt2spd(cmdargs[4],max(alt,traf.alt[i]))
-                                        if numargs>=5:
-                                            afterwp = cmdargs[5]
-                                            if rte.wpname.count(afterwp)==0:
-                                                scr.echo("Waypoint ",afterwp," not found."+
-                                                "waypoint added at end of route.")
-                                                afterwp =""
-
-                                        wpok    = True
-    
-                                    # Add the wpt to route
-                                    if wpok: 
-                                        wpidx = rte.addwpt(traf,i,name,wptype,lat,lon,alt,spd,afterwp)
-                                        norig = int(traf.orig[i]!="")
-                                        ndest = int(traf.dest[i]!="")
-    
-                                        if rte.nwp-norig-ndest==1: # first waypoint: make active
-                                           rte.direct(traf,i,rte.wpname[norig]) #0 if no rig
-                                           traf.swlnav[i] = True
-    
-                                    else:
-                                        scr.echo(traf.id[i]+": waypoint not added")
-                                        synerr = True
-                                #except:
-                                 #   scr.echo(traf.id[i]+": waypoint not added")
-                                 #   synerr = True
-                                
-                #----------------------------------------------------------------------
-                # DELWPT   : DELWPT acid,WPname
-                #----------------------------------------------------------------------
-                elif cmd == "DELWPT":
-
-                    # Help text             
-                    if numargs <= 1:
-                        scr.echo( \
-                        "DELWPT acid, wpname")
-
-                    # Delete waypoint
-                    else:
-                        acid = cmdargs[1]     # call sign
-                        i = traf.id2idx(cmdargs) # Get index of this a/c
-                        if traf.id2idx(cmdargs[1])<0:
-                            scr.echo("DELWPT: Aircraft "+cmdargs[1]+" not found.")
-                        else:
-                            rte = traf.route[i]   # Get pointer to route object
-                        idx = rte.delwpt(cmdargs[2])
-                        if idx==-1:
-                            scr.echo("DELWPT: Waypoint "+cmdargs[2]+ \
-                                           " not found in route of "+acid+".")
-
-                #----------------------------------------------------------------------
-                # DIRECT [TO] wpname: set active waypoint
-                #----------------------------------------------------------------------
-                elif cmd == "DIRECT":
-
-                    # remove optional 'TO'                   
-                    if numargs>=1 and cmdargs[1].upper()=="TO":
-                        del cmdargs[1]
-                        numargs= numargs-1
-
-                    # Check aircraft id, call route.direct function           
-                    if numargs <= 1:
-                        scr.echo("DIRECT acid, wpname")
-                    else:
-                        acid = cmdargs[1]           # call sign
-                        i = traf.id2idx(cmdargs[1])    # Get index of this a/c
-                        if i<0:
-                            scr.echo("DIRECT: Aircraft "+cmdargs[1]+" not found.")
-
-                        else:
-                            # Go direct, check success
-                           swok,vnavok = traf.route[i].direct(traf,i,cmdargs[2])
-                           if swok:
-                               traf.swlnav[i] = True
-                               traf.swvnav[i] = vnavok
-                           else:
-                               scr.echo(acid+": DIRECT waypoint"+cmdargs[2] \
-                                                 +" not found.")
-
-                #----------------------------------------------------------------------
-                #  LISTRTE acid, [pagenr]v   (7 wpts per page)
-                #----------------------------------------------------------------------
-                elif cmd == "LISTRTE":
-                    if numargs < 1:
-                        scr.echo("LISTRTE acid [pagenr]")
-                    else:
-                        acid = cmdargs[1]           # call sign
-                        i = traf.id2idx(cmdargs[1])    # Get index of this a/c
-                        if i<0:
-                            scr.echo("LISTRTE: Aircraft "+cmdargs[1]+" not found.")
-
-                        elif traf.route[i].nwp<=0 :
-                            scr.echo("LISTRTE: Aircraft "+cmdargs[1]+" has no route.")
-                        else:
-                            nwp    = traf.route[i].nwp
-                            npages = int((nwp+6)/7)
-                            if numargs==1:
-                                ipage = 0
-                            else:
-                                try:
-                                    ipage = int(cmdargs[2])
-                                except:
-                                    synerr = True
-                            
-                            if not synerr:
-                                traf.route[i].listrte(scr,ipage)
-                                if ipage+1<npages:
-                                    scr.cmdline("LISTRTE "+acid+","+str(ipage+1))
-
-                #----------------------------------------------------------------------
-                # ECHO: show messages in Edit window
-                #----------------------------------------------------------------------
-                elif cmd == "ECHO":
-                    if numargs == 0:
-                        scr.echo("ECHO txt")
-                    else:
-                        scr.echo(line.strip()[5:])
-
-                #----------------------------------------------------------------------
-                # INSEDIT: insert text in Edit window
-                #----------------------------------------------------------------------
-                elif cmd == "INSEDIT":
-                    if numargs == 0:
-                        scr.echo("INSEDIT txt")
-                    else:
-                        scr.editwin.insert(cmdline.strip()[8:])
-
-                #----------------------------------------------------------------------
-                # ADSBCOVERAGE: Draw the coverage area of the To70 ADS-B antennas
-                #----------------------------------------------------------------------
-                elif cmd == "ADSBCOVERAGE":
-                    if numargs == 0:
-                        scr.echo("ADSBCOVERAGE ON/OFF")
-                        if traf.swAdsbCoverage:
-                            scr.echo("ADSB Coverage Area is currently ON")
-                        else:
-                            scr.echo("ADSB Coverage Area is currently OFF")
-                    else:
-                        if cmdargs[1] == "ON":
-                            traf.swAdsbCoverage = True
-
-
-                        elif cmdargs[1] == "OFF" or cmdargs[1] == "OF":
-                            traf.swAdsbCoverage = False
-
-                        else:
-                            scr.echo('Syntax error')
-                            scr.echo("ADSBCOVERAGE ON/OFF")
-
-                elif cmd == "BOX":
-                    if numargs == 0:
-                        scr.echo(cmd + " name,lat1,lon1,lat2,lon2")
-                    data = []
-                    for i in cmdargs[2:]:
-                        data.append(float(i))
-                    scr.objappend(2, cmdargs[1], data)
-                elif cmd[:4] == "POLY":
-                    if numargs == 0:
-                        scr.echo(cmd + " name,lat1,lon1,lat2,lon2,...")
-                    data = []
-                    for i in cmdargs[2:]:
-                        data.append(float(i))
-                    scr.objappend(4, cmdargs[1], data)
-                elif cmd == "CIRCLE":
-                    pass
-                #------------------------------------------------------------------
-                # LINE color,lat1,lon1,lat2,lon2 command: draw a line
-                #------------------------------------------------------------------
-                elif cmd[:4] == "LINE":
-
-                    if numargs == 0:
-                        scr.echo("LINE name,lat1,lon1,lat2,lon2")
-                        scr.echo("color=red,green,cyan.. (8 basic colours)")
-                    else:
-                        if numargs == 5:
-                                data = [float(cmdargs[2]), float(cmdargs[3]), float(cmdargs[4]), float(cmdargs[5])]
-                                scr.objappend(1, cmdargs[1], data)
-
-                #------------------------------------------------------------------
-                # DUMPRTE acid: Dump the route to the route-file for debugging
-                # 
-                #------------------------------------------------------------------
-                elif cmd[:7] == "DUMPRTE":
-                    if numargs == 0:
-                        scr.echo("DUMPRTE acid")
-                    else:
-                        acid = cmdargs[1]
-                        i = traf.id2idx(acid)
-                        
-                        # Open file in append mode, write header
-                        f = open("./data/output/routelog.txt","a")
-                        f.write("\nRoute "+acid+":\n")
-                        f.write("(name,type,lat,lon,alt,spd,toalt,xtoalt)  ")
-                        f.write("type: 0=latlon 1=navdb  2=orig  3=dest  4=calwp\n")
-
-                        # write flight plan VNAV data (Lateral is visible on screen)
-                        for j in range(traf.route[i].nwp):
-                            f.write( str(( j, \
-                                  traf.route[i].wpname[j],  \
-                                  traf.route[i].wptype[j],  \
-                                  round(traf.route[i].wplat[j],4),   \
-                                  round(traf.route[i].wplon[j],4),   \
-                                  int(0.5+traf.route[i].wpalt[j]/ft),   \
-                                  int(0.5+traf.route[i].wpspd[j]/kts),   \
-                                  int(0.5+traf.route[i].wptoalt[j]/ft),   \
-                                  round(traf.route[i].wpxtoalt[j]/nm,3) \
-                                  )) + "\n")
-
-                        # End of data
-                        f.write("----\n")
-                        f.close()
-
-                #------------------------------------------------------------------
-                # !!! This is a template, please make a copy and keep it !!!
-                # Insert new command here: first three chars should be unique
-                #------------------------------------------------------------------
-                elif cmd[:3] == "XXX":
-                    if numargs == 0:
-                        scr.echo("cmd arg1, arg2")
-                    else:
-                        arg1 = cmdargs[1]  # arguments are strings
-                        arg2 = cmdargs[2]  # arguments are strings
-
-                #-------------------------------------------------------------------
-                # Reference to other command files
-                # Check external references
-                #-------------------------------------------------------------------
-                elif cmd[:4] in self.extracmdrefs:
-                    self.extracmdrefs[cmd[:4]].process(cmd[4:], numargs, cmdargs, sim, traf, scr, self)
-
-                #-------------------------------------------------------------------
-                # Command not found
-                #-------------------------------------------------------------------
+            #**********************************************************************
+            #=====================  Start of command branches =====================
+            #**********************************************************************
+
+            #----------------------------------------------------------------------
+            # First check command synonymes list, then in dictionary
+            #----------------------------------------------------------------------
+            if cmd in self.cmdsynon.keys():
+                cmd = self.cmdsynon[cmd]
+
+            if cmd in self.cmddict.keys():
+                helptext, argtypelist, function = self.cmddict[cmd]
+                argvsopt = argtypelist.split('[')
+                argtypes = argvsopt[0].strip(',').split(",")
+                if argtypes == ['']:
+                    argtypes = []
+
+                # Check if at least the number of mandatory arguments is given.
+                if numargs < len(argtypes):
+                    print numargs, len(argtypes)
+                    scr.echo("Syntax error: Too few arguments")
+                    scr.echo(line)
+                    scr.echo(helptext)
+                    continue
+
+                # Add optional argument types if they are given
+                if len(argvsopt) == 2:
+                    argtypes += argvsopt[1].strip(']').split(',')
+
+                # Process arg list
+                optargs = {}
+                # Special case: single text string argument: case sensitive,
+                # possibly with spaces/newlines pass the original
+                if argtypes == ['string']:
+                    arglist = [line[len(cmd) + 1:]]
                 else:
-                    if numargs==0:
-                        scr.echo("Unknown command or aircraft: " + cmd)
-                    else:
-                        scr.echo("Unknown command: " + cmd)
+                    arglist = []
+                    curtype = curarg = 0
+                    while curtype < len(argtypes) and curarg < len(args):
+                        if argtypes[curtype] == '...':
+                            curtype -= 1
+                        argtype    = argtypes[curtype].strip().split('/')
+                        for i in range(len(argtype)):
+                            try:
+                                argtypei = argtype[i]
+                                parsed_arg, opt_arg, argstep = self.argparse(argtypei, curarg, args, traf, scr)
+                                if parsed_arg[0] is None and argtypei in optargs:
+                                    arglist += optargs[argtypei]
+                                else:
+                                    arglist += parsed_arg
+                                optargs.update(opt_arg)
+                                curarg  += argstep
+                                break
+                            except:
+                                # not yet last type possible here?
+                                if i < len(argtype) - 1:
+                                    # We have alternative argument formats that we can try
+                                    continue
+                                else:
+                                    synerr = True
+                                    scr.echo("Syntax error in processing arguments")
+                                    scr.echo(line)
+                                    scr.echo(helptext)
+                        curtype += 1
 
-                #**********************************************************************
-                #======================  End of command branches ======================
-                #**********************************************************************
+                # Call function return flag,text
+                # flag: indicates sucess
+                # text: optional error message
+                if not synerr:
+                    results = function(*arglist)  # * = unpack list to call arguments
 
-                # Syntax not ok, => Default syntax error message:
-                if synerr:
-                    print "Syntax error in command: ", cmdline
-                    scr.echo("Syntax error in command:" + cmd)
-                    scr.echo(cmdline)
+                    if type(results) == bool:  # Only flag is returned
+                        synerr = not results
+                        if synerr:
+                            if numargs <= 0 or args[curarg] == "?":
+                                scr.echo(helptext)
+                            else:
+                                scr.echo("Syntax error: " + helptext)
+                            synerr =  False  # Prevent further nagging
 
+                    elif type(results) == list or type(results) == tuple:
+                        # Maybe there is also an error message returned?
+                        if len(results) >= 1:
+                            synerr = not results[0]
+
+                        if len(results) >= 2:
+                            scr.echo(cmd + ":" + results[1])
+                            synerr = False
+
+                else:  # synerr:
+                    scr.echo("Syntax error: " + helptext)
+
+            #----------------------------------------------------------------------
+            # ZOOM command (or use ++++  or --  to zoom in or out)
+            #----------------------------------------------------------------------
+            elif cmd[0] in ["+", "=", "-"]:
+                nplus = cmd.count("+") + cmd.count("=")  # = equals + (same key)
+                nmin  = cmd.count("-")
+                scr.zoom(sqrt(2) ** (nplus - nmin), absolute=False)
+
+            #-------------------------------------------------------------------
+            # Reference to other command files
+            # Check external references
+            #-------------------------------------------------------------------
+            elif cmd[:4] in self.extracmdrefs:
+                self.extracmdrefs[cmd[:4]].process(cmd[4:], numargs, [cmd] + args, sim, traf, scr, self)
+
+            #-------------------------------------------------------------------
+            # Command not found
+            #-------------------------------------------------------------------
+            else:
+                if numargs == 0:
+                    scr.echo("Unknown command or aircraft: " + cmd)
+                else:
+                    scr.echo("Unknown command: " + cmd)
+
+            #**********************************************************************
+            #======================  End of command branches ======================
+            #**********************************************************************
 
         # End of for-loop of cmdstack
         self.cmdstack = []
         return
+
+    def argparse(self, argtype, argidx, args, traf, scr):
+        """ Parse one or more arguments.
+
+            Returns:
+            - A list with the parse results
+            - The number of arguments parsed
+            - A dict with additional optional parsed arguments. """
+        if args[argidx] == "" or args[argidx] == "*":  # Empty arg or wildcard => parse None
+            return [None], {}, 1
+
+        if argtype == "acid":  # aircraft id => parse index
+            idx = traf.id2idx(args[argidx])
+            if idx < 0:
+                scr.echo(cmd + ":" + args[idx] + " not found")
+                raise IndexError
+            else:
+                return [idx], {}, 1
+
+        if argtype == "txt":  # simple text
+            return [args[argidx]], {}, 1
+
+        if argtype == "float":  # float number
+            return [float(args[argidx])], {}, 1
+
+        if argtype == "int":   # integer
+            return [int(args[argidx])], {}, 1
+
+        if argtype == "onoff" or argtype == "bool":
+            sw = (args[argidx] == "ON" or
+                  args[argidx] == "1" or args[argidx] == "TRUE")
+            return [sw], {}, 1
+
+        if argtype == "pos":
+            # Arg is an existing aircraft?
+            idx = traf.id2idx(args[argidx])
+            if idx >= 0:
+                return [traf.lat[idx], traf.lon[idx]], {}, 1
+            # Arg is an airport?
+            idx = traf.navdb.getapidx(args[argidx])
+            if idx >= 0:
+                # Next arg is a runway?
+                if len(args) > argidx + 1 and args[argidx] in traf.navdb.rwythresholds and \
+                        args[argidx + 1] in traf.navdb.rwythresholds[args[argidx]]:
+                    arglist = traf.navdb.rwythresholds[args[argidx]][args[argidx + 1]][:2]
+                    optargs = {"hdg": [traf.navdb.rwythresholds[args[argidx]][args[argidx + 1]][2]]}
+                    return arglist, optargs, 2
+
+                # If no runway return airport center
+                return [traf.navdb.aplat[idx], traf.navdb.aplon[idx]], {}, 1
+            # Arg is a waypoint?
+            idx = traf.navdb.getwpidx(args[argidx])
+            if idx >= 0:
+                return [traf.navdb.wplat[idx], traf.navdb.wplon[idx]], {}, 1
+            # Arg, next arg are a lat/lon combination
+            return [txt2lat(args[argidx]), txt2lon(args[argidx + 1])], {}, 2
+
+        if argtype == "latlon":
+            return [txt2lat(args[argidx]), txt2lon(args[argidx + 1])], {}, 2
+
+        if argtype == "spd":  # CAS[kts] Mach
+            spd = float(args[argidx].upper().replace("M", ".").replace("..", "."))
+            if not 0.1 < spd < 1.0:
+                spd *= kts
+            return [spd], {}, 1  # speed CAS[m/s] or Mach (float)
+
+        if argtype == "vspd":
+            return [fpm * float(args[argidx])], {}, 1
+
+        if argtype == "alt":  # alt: FL250 or 25000 [ft]
+            return [ft * txt2alt(args[argidx])], {}, 1  # alt in m
+
+        if argtype == "hdg":
+            # TODO: for now no difference between magnetic/true heading
+            hdg = float(args[argidx].upper().replace('T', '').replace('M', ''))
+            return [hdg], {}, 1
+
+        if argtype == "time":
+            ttxt = args[argidx].strip().split(':')
+            if len(ttxt) >= 3:
+                ihr  = int(ttxt[0]) * 3600.0
+                imin = int(ttxt[1]) * 60.0
+                xsec = float(ttxt[2])
+                return [ihr + imin + xsec], {}, 1
+            else:
+                return [float(args[argidx])], {}, 1

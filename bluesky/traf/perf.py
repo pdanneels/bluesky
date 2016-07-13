@@ -2,10 +2,10 @@ import os
 import numpy as np
 from xml.etree import ElementTree
 from math import *
-from ..tools.aero import ft, g0, a0, T0, rho0, gamma1, gamma2,  beta, R, kts, lbs, inch, sqft, fpm
-from ..tools.aero_np import vtas2cas
+from ..tools.aero import ft, g0, a0, T0, rho0, gamma1, gamma2,  beta, R, \
+    kts, lbs, inch, sqft, fpm, vtas2cas
 
-from ..tools.performance import esf, phases, limits
+from performance import esf, phases, limits
 
 
 class CoeffBS:
@@ -717,10 +717,10 @@ class Perf():
                     (self.phase==5)*self.vmld + (self.phase==6)*-10.0
 
         # forwarding to tools
-        self.traf.lspd, self.traf.lalt, self.traf.lvs, self.traf.ama = \
-        limits(self.traf.desspd, self.traf.lspd, self.vmin, self.vmo, self.mmo,\
-        self.traf.M, self.traf.ama, self.traf.alt, self.hmaxact, self.traf.desalt, self.traf.lalt,\
-        self.maxthr, self.Thr,self.traf.lvs, self.D, self.traf.tas, self.mass, self.ESF)        
+        self.traf.limspd, self.traf.limalt, self.traf.limvs, self.traf.ama = \
+        limits(self.traf.desspd, self.traf.limspd, self.vmin, self.vmo, self.mmo,\
+        self.traf.M, self.traf.ama, self.traf.alt, self.hmaxact, self.traf.desalt, self.traf.limalt,\
+        self.maxthr, self.Thr,self.traf.limvs, self.D, self.traf.tas, self.mass, self.ESF)        
 
         return
 
