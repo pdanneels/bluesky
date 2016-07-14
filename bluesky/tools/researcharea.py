@@ -17,7 +17,7 @@
 #     pylint: disable=E1101
 
 import numpy as np
-from ..tools.aero_np import latlondist
+from ..tools import geo
 
 class Rarea:
     """
@@ -56,8 +56,8 @@ class Rarea:
         self.southb = min(lat0, lat1)
         self.eastb = max(lon0, lon1)
         self.westb = min(lon0, lon1)
-        self.surfacearea = latlondist(self.southb, self.westb, self.southb, self.eastb) * \
-                            latlondist(self.southb, self.eastb, self.northb, self.eastb)
+        self.surfacearea = geo.latlondist(self.southb, self.westb, self.southb, self.eastb) * \
+                            geo.latlondist(self.southb, self.eastb, self.northb, self.eastb)
         scr.objappend(1, "RAREA", [self.northb, self.westb, self.northb, self.eastb])
         scr.objappend(1, "RAREA", [self.northb, self.eastb, self.southb, self.eastb])
         scr.objappend(1, "RAREA", [self.southb, self.eastb, self.southb, self.westb])
