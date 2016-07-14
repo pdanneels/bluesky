@@ -103,7 +103,7 @@ class MetricConflictsPerAc():
 
     def update(self, geo):
         traf = self.sim.traf
-        self.conflictsperac = float(traf.dbconf.nconf)/traf.ntraf
+        self.conflictsperac = float(traf.asas.nconf)/traf.ntraf
         self.timehist.append(self.sim.simt)
         self.hist.append(self.conflictsperac)
         if self.swprint:
@@ -334,7 +334,8 @@ class Metrics():
         # Toggle calculations and output
         self.swmetrics = True       # Toggle metrics
         self.swplot = True          # Toggle plot
-        self.swprint = True         # Toggle print
+        self.swprint = False        # Toggle print
+        self.swmetricslog = False   # Toggle metrics log
 
         # Time
         self.timer0 = -9999         # Force first time call, update
@@ -383,13 +384,21 @@ class Metrics():
 
         geo = Geometric(sim)        # fresh instance of geo data
         geo.update()
-        log.updatem1("CA", str(self.ca.update(geo)))            # collisions devided by #AC
-        log.updatem1("Cr", str(self.conflictrate.update(geo)))            # collision rate
-        log.updatem1("avgdHDG", str(self.dhdg.update(geo)))     # average range rate
-        log.updatem1("avgrdot", str(self.rdot.update(geo)))     # average range rate
-        log.updatem1("Td", str(self.trafficdensity.update(geo)))            # traffic density
-        log.updatem1("avgdV", str(self.vrel.update(geo)))       # average relative velocity
-        log.updatem1("avgV", str(np.average(sim.traf.gs)))      # average groundspeed
+        if self.swmetricslog:
+            log.updatem1("CA", str(self.ca.update(geo)))            # collisions devided by #AC
+            log.updatem1("Cr", str(self.conflictrate.update(geo)))            # collision rate
+            log.updatem1("avgdHDG", str(self.dhdg.update(geo)))     # average range rate
+            log.updatem1("avgrdot", str(self.rdot.update(geo)))     # average range rate
+            log.updatem1("Td", str(self.trafficdensity.update(geo)))            # traffic density
+            log.updatem1("avgdV", str(self.vrel.update(geo)))       # average relative velocity
+            log.updatem1("avgV", str(np.average(sim.traf.gs)))      # average groundspeed
+        else:
+            self.ca.update(geo)
+            self.conflictrate.update(geo)
+            self.dhdg.update(geo)
+            self.rdot.update(geo)
+            self.trafficdensity.update(geo)
+            self.vrel.update(geo)
         self.ot.update()
         if self.swprint:
             print "------------------------"

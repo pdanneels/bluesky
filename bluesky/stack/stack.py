@@ -276,7 +276,7 @@ class Commandstack:
             ],
             "RAREA": [
                 "RAREA lat0,lon0,lat1,lon1",
-                "lat,lon,lat,lon",
+                "latlon,latlon",
                 lambda *args: sim.rarea.create(*args)
             ],
             "RESET": [

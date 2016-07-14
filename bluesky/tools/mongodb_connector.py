@@ -22,12 +22,12 @@ class MongoDB():
 
         HOST = 'danneels.nl'
         PORT = '27017'
-        #USERNAME = 'fr24ro'
-        #PASSWORD = 'TVewF3HCS52U'
-        USERNAME = 'metropolisrw'
-        PASSWORD = 'Mq2vUNuXAwz8'
-        #self.DB = 'fr24'
-        self.DB = 'metropolis'
+        USERNAME = 'fr24ro'
+        PASSWORD = 'TVewF3HCS52U'
+        #USERNAME = 'metropolisrw'
+        #PASSWORD = 'Mq2vUNuXAwz8'
+        self.DB = 'fr24'
+        #self.DB = 'metropolis'
         self.MCONNECTIONSTRING = "mongodb://"+USERNAME+":"+PASSWORD+"@"+HOST+":"+PORT+"/"+self.DB
 
         self.timer0 = -9999
@@ -38,11 +38,9 @@ class MongoDB():
         self.fetchstart = 0         # Start time fetching data from server
         self.fetchfin = 0           # Finish time fetching data from server
 
-        self.MODE = 'metropolis'          # Mode, can be 'live' or 'replay'
+        self.MODE = 'live'          # Mode, can be 'live' or 'replay'
         replaystart = '2016_06_29:12_30'  # Set to time you want to start replay "%Y_%m_%d:%H_%M"
         metropoliscollection = 'OFF_FULLMIX_SET1_SNAP_fm_morninghgh_cr_off_ii_1407112255'
-        
-        
         
         if self.MODE == 'replay':
             self.STARTTIME = time.mktime(datetime.strptime(replaystart, "%Y_%m_%d:%H_%M").timetuple())
@@ -87,14 +85,18 @@ class MongoDB():
 
     def getmdbdata(self, MCOLL):
         """ This function collects data from the mongoDB server """
-        mintime = MCOLL.find_one(sort=[('ts', 1)])['ts']
+
         if self.MODE == 'metropolis':
-            self.STARTTIME = mintime
+            self.STARTTIME = MCOLL.find_one(sort=[('ts', 1)])['ts']
         while True:
             if self.MODE == 'replay':
                 mintime = self.STARTTIME + self.sim.simt - self.TIMECHUNK
                 maxtime = self.STARTTIME + self.sim.simt
+            elif self.MODE == 'live':
+                mintime = time.time() - 300
+                maxtime = time.time()
             else:
+                mintime = self.STARTTIME
                 maxtime = 0
 
             filterpipe = getfilter(self.MODE, mintime, maxtime)            
