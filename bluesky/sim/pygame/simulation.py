@@ -2,8 +2,8 @@ import time
 from ...traf import Traffic
 from ...stack import Commandstack
 from ... import settings
-from ...tools.datalog import Datalog
 
+from ...tools.datalog import Datalog
 from ...traf.metric2 import Metrics
 #from ...tools.network import StackTelnetServer
 #from ...tools.datafeed import Modesbeast

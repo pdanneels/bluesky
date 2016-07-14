@@ -12,10 +12,14 @@ from simevents import StackTextEventType, BatchEventType, BatchEvent, SimStateEv
 from ...traf import Traffic
 from ...navdb import Navdatabase
 from ...stack import Commandstack
-from ...traf import Metric
 from ... import settings
-from ...tools.datafeed import Modesbeast
+
 from ...tools.datalog import Datalog
+from ...traf.metric2 import Metrics
+#from ...tools.network import StackTelnetServer
+#from ...tools.datafeed import Modesbeast
+from ...tools.researcharea import Rarea
+from ...tools.mongodb_connector import MongoDB
 
 
 class Simulation(QObject):
@@ -66,9 +70,13 @@ class Simulation(QObject):
         self.screenio    = ScreenIO(self, manager)
         self.traf        = Traffic(self.navdb)
         self.stack       = Commandstack(self, self.traf, self.screenio)
-        # Additional modules
-        self.metric      = Metric()
-        self.beastfeed   = Modesbeast(self.stack, self.traf)
+
+        # Optional modules
+        self.beastfeed = None # Modesbeast(self.stack, self.traf)
+        self.telnet_in = None # StackTelnetServer(self.stack)
+        self.rarea = Rarea(self, self.screenio)
+        self.metrics = Metrics(self)
+        self.mdb = MongoDB(self)
 
     def doWork(self):
         self.syst  = int(time.time() * 1000.0)
@@ -79,7 +87,12 @@ class Simulation(QObject):
             self.screenio.update()
 
             # Update the Mode-S beast parsing
-            self.beastfeed.update()
+            if self.beastfeed is not None:
+                self.beastfeed.update()
+
+            # Update the MongoDB feed
+            if self.mdb is not None:
+                self.mdb.update()
 
             # Simulation starts as soon as there is traffic, or pending commands
             if self.state == Simulation.init:
@@ -99,10 +112,10 @@ class Simulation(QObject):
                 self.traf.update(self.simt, self.simdt)
 
                 # Update metrics
-                self.metric.update(self)
+                self.metrics.update()
 
                 # Update log
-                self.datalog.update(self)
+                #self.datalog.update()
 
                 # Update time for the next timestep
                 self.simt += self.simdt
