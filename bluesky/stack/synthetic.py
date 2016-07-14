@@ -8,7 +8,8 @@ import sys
 sys.path.append('bluesky/tools/')
 import random
 import numpy as np
-from aero import ft, eas2tas, qdrpos
+from aero import ft, eas2tas
+import geo
 from misc import txt2alt, txt2spd
 
 # To ignore numpy errors:
@@ -167,6 +168,7 @@ def process(command, numargs, cmdargs, sim, traf, scr, cmd):
             hseplat = hseplat*matsep
             vel = 200 #m/s
             extradist = (vel*1.1)*5*60/mperdeg #degrees latlon flown in 5 minutes
+
             for i in range(size):
                 acidn = "NORTH"+str(i)
                 traf.create(acidn,"MATRIX",hseplat*(size-1.)/2+extradist,(i-(size-1.)/2)*hseplat,180,20000*ft,vel)
@@ -187,7 +189,7 @@ def process(command, numargs, cmdargs, sim, traf, scr, cmd):
         traf.reset(sim.navdb)
         mperdeg=111319.
         altdif=3000 # ft
-        hsep=traf.dbconf.R # [m] horizontal separation minimum
+        hsep=traf.asas.R # [m] horizontal separation minimum
         floorsep=1.1 #factor of extra spacing in the floor
         hseplat=hsep/mperdeg*floorsep
         traf.create("OWNSHIP", "FLOOR", -1, 0, 90, (20000+altdif)*ft, 200)
@@ -250,7 +252,7 @@ def process(command, numargs, cmdargs, sim, traf, scr, cmd):
                     raise Exception()
 
                 mperdeg=111319.
-                hsep=traf.dbconf.R # [m] horizontal separation minimum
+                hsep=traf.asas.R # [m] horizontal separation minimum
                 hseplat=hsep/mperdeg
                 matsep=1.1 #factor of extra space in the formation
                 hseplat=hseplat*matsep
@@ -289,7 +291,7 @@ def process(command, numargs, cmdargs, sim, traf, scr, cmd):
                     raise Exception() 
 
                 mperdeg=111319.
-                hsep=traf.dbconf.R # [m] horizontal separation minimum
+                hsep=traf.asas.R # [m] horizontal separation minimum
                 hseplat=hsep/mperdeg
                 matsep=1.1 #factor of extra space in the formation
                 hseplat=hseplat*matsep
@@ -336,7 +338,7 @@ class Angledtraffic():
         if numargs>2:   #process optional arguments
             for i in range(2 ,numargs): # loop over arguments (TODO: put arguments in np array)
                 if cmdargs[i].upper().startswith("-R"): #radius
-                    startdistance = qdrpos(0,0,90,float(cmdargs[i][3:]))[2] #input in nm
+                    startdistance = geo.qdrpos(0,0,90,float(cmdargs[i][3:]))[2] #input in nm
                 elif cmdargs[i].upper().startswith("-A"): #altitude
                     acalt = txt2alt(cmdargs[i][3:])*ft
                 elif cmdargs[i].upper().startswith("-S"): #speed
