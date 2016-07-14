@@ -22,10 +22,8 @@ import numpy as np
 from math import sqrt
 import matplotlib.pyplot as plt
 
-from ..tools.aero_np import qdrdist_vector
+from ..tools import geo
 from ..tools.misc import degto180
-
-
 
 class Geometric():
     """
@@ -76,7 +74,7 @@ class Geometric():
         # realtive bearing and distance
         combslatA, combslatB = np.meshgrid(traf.lat, traf.lat)
         combslonA, combslonB = np.meshgrid(traf.lon, traf.lon)
-        truebearing, distance = qdrdist_vector(combslatA.flatten(), combslonA.flatten(), combslatB.flatten(), combslonB.flatten())
+        truebearing, distance = geo.qdrdist_matrix(combslatA.flatten(), combslonA.flatten(), combslatB.flatten(), combslonB.flatten())
         relativebearing = truebearing%360 - np.tile(traf.trk, size)%360
         qdrdist[:, :, 0] = np.reshape(relativebearing, (size, size))
         qdrdist[:, :, 1] = np.reshape(distance, (size, size))
