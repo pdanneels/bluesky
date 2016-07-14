@@ -10,19 +10,24 @@ import pymongo
 import threading
 import Queue
 import time
+from ..tools.mongodb_filterpipe import getfilter
 from datetime import datetime
+import sys
 
 class MongoDB():
-    def __init__(self, sim, stack):
+    def __init__(self, sim):
         self.sim = sim
         self.traf = sim.traf
-        self.stack = stack
+        self.stack = sim.stack
 
         HOST = 'danneels.nl'
         PORT = '27017'
-        USERNAME = 'fr24ro'
-        PASSWORD = 'TVewF3HCS52U'
-        self.DB = 'fr24'
+        #USERNAME = 'fr24ro'
+        #PASSWORD = 'TVewF3HCS52U'
+        USERNAME = 'metropolisrw'
+        PASSWORD = 'Mq2vUNuXAwz8'
+        #self.DB = 'fr24'
+        self.DB = 'metropolis'
         self.MCONNECTIONSTRING = "mongodb://"+USERNAME+":"+PASSWORD+"@"+HOST+":"+PORT+"/"+self.DB
 
         self.timer0 = -9999
@@ -33,20 +38,31 @@ class MongoDB():
         self.fetchstart = 0         # Start time fetching data from server
         self.fetchfin = 0           # Finish time fetching data from server
 
-        self.MODE = 'replay'          # Mode, can be 'live' or 'replay'
+        self.MODE = 'metropolis'          # Mode, can be 'live' or 'replay'
         replaystart = '2016_06_29:12_30'  # Set to time you want to start replay "%Y_%m_%d:%H_%M"
-
+        metropoliscollection = 'OFF_FULLMIX_SET1_SNAP_fm_morninghgh_cr_off_ii_1407112255'
+        
+        
+        
         if self.MODE == 'replay':
             self.STARTTIME = time.mktime(datetime.strptime(replaystart, "%Y_%m_%d:%H_%M").timetuple())
             self.COLL = 'EHAM_' + replaystart[:10]
             print "Starting replay mode."
             print "Connecting to collection: %s at %s" % \
                     (self.COLL, str(datetime.fromtimestamp(self.STARTTIME)))
-        else:                       # Live mode
+
+        elif self.MODE == 'metropolis':
+            print "Starting metropolis mode"
+            self.COLL = metropoliscollection
+
+        elif self.MODE == 'live':
             self.STARTTIME = time.time()
             self.COLL = 'EHAM_' + datetime.utcnow().strftime("%Y_%m_%d")
             print "Starting live mode."
             print "Connecting to collection: %s at UTC now." % self.COLL
+
+        else:
+            print "No MongoDB connection mode defined."
 
         self.dataqueue = Queue.Queue(maxsize=0)
         self.mdbthread()
@@ -71,47 +87,18 @@ class MongoDB():
 
     def getmdbdata(self, MCOLL):
         """ This function collects data from the mongoDB server """
+        mintime = MCOLL.find_one(sort=[('ts', 1)])['ts']
+        if self.MODE == 'metropolis':
+            self.STARTTIME = mintime
         while True:
             if self.MODE == 'replay':
                 mintime = self.STARTTIME + self.sim.simt - self.TIMECHUNK
                 maxtime = self.STARTTIME + self.sim.simt
             else:
-                mintime = time.time() - 300
-                maxtime = time.time()
+                maxtime = 0
 
-            filterpipe = [{'$match' : { \
-                                'icao' : {'$ne' : ''}, \
-                                'mdl' : {'$ne' : ''}, \
-                                'ts' : {'$gt' : mintime, '$lt' : maxtime} \
-                                } \
-                    }, \
-                    {'$group' : {  \
-                                '_id' : '$icao', \
-                                'latest' : {'$max' : '$ts'}, \
-                                'objid' : {'$first' : '$$CURRENT._id'}, \
-                                'loc' : {'$first' : '$$CURRENT.loc'}, \
-                                'from' : {'$first' : '$$CURRENT.from'}, \
-                                'mdl' : {'$first' : '$$CURRENT.mdl'}, \
-                                'to' : {'$first' : '$$CURRENT.to'}, \
-                                'roc' : {'$first' : '$$CURRENT.roc'}, \
-                                'hdg' : {'$first' : '$$CURRENT.hdg'}, \
-                                'alt' : {'$first' : '$$CURRENT.alt'}, \
-                                'spd' : {'$first' : '$$CURRENT.spd'} \
-                                } \
-                    }, \
-                    {'$project' : {'_id' : '$objid', \
-                                    'loc' : 1, \
-                                    'from' : 1, \
-                                    'mdl' : 1, \
-                                    'to' : 1, \
-                                    'roc' : 1, \
-                                    'ts' : '$latest', \
-                                    'icao' : '$_id', \
-                                    'hdg' : 1, \
-                                    'alt' : 1, \
-                                    'spd' : 1 \
-                                    }
-                    }]
+            filterpipe = getfilter(self.MODE, mintime, maxtime)            
+            
             self.fetchstart = time.time()
             filtereddata = list(MCOLL.aggregate(filterpipe))
             if len(filtereddata) > 0:
@@ -148,10 +135,10 @@ class MongoDB():
                         cmdstr = 'MOVE %s, %f, %f, %d' % \
                             (acid, pos['loc']['lat'], pos['loc']['lng'], pos['alt'])
                         self.stack.stack(cmdstr)
-    
+
                         cmdstr = 'HDG %s, %f' % (acid, pos['hdg'])
                         self.stack.stack(cmdstr)
-    
+
                         cmdstr = 'SPD %s, %f' % (acid, pos['spd'])
                         self.stack.stack(cmdstr)
         if createcount > 0:

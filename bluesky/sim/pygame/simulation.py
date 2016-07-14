@@ -62,7 +62,7 @@ class Simulation:
         self.telnet_in = None # StackTelnetServer(self.stack)
         self.rarea = Rarea(self, gui.scr)
         self.metrics = Metrics(self)
-        self.mdb = MongoDB(self, self.stack)
+        self.mdb = MongoDB(self)
 
         return
 

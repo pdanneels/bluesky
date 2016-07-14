@@ -143,17 +143,19 @@ class MetricConflictRate():
             ioac = []
             iot = []
             iov = []
-            for i, x in enumerate(rarea.leavetime): # loop over tracking DB
-                if x != 0:
+            for i, recordedleave in enumerate(rarea.leavetime): # loop over tracking DB
+                if recordedleave != 0:
                     ioac.append(rarea.atimeid[i])
                     iot.append(rarea.leavetime[i]-rarea.entertime[i])
                     iov.append(rarea.gs[i])
+            self.timehist.append(sim.simt)
             if len(ioac) != 0:
                 self.conflictrate = np.average(np.array(iov))*self.sep*np.average(np.array(iot))/rarea.surfacearea/(sim.simt - rarea.entertime[1])
-                self.timehist.append(sim.simt)
-                self.hist.append(self.crconflictrate)
+                self.hist.append(self.conflictrate)
                 if self.swprint:
-                    print "Collision rate: " + str(self.crconflictrate)
+                    print "Collision rate: " + str(self.conflictrate)
+            else:
+                self.hist.append(0)
         return self.conflictrate
 
     def gethist(self):
@@ -303,6 +305,9 @@ class MetricOther():
         if self.rarea.surfacearea > 0:
             self.histntraf.append(np.average(traf.ntraf))
             self.histrantraf.append(np.average(self.rarea.ntraf))
+        else:
+            self.histntraf.append(0)
+            self.histrantraf.append(0)
         if self.swprint:
             print "Average V: " + str(np.average(traf.gs)) + " m/s"
             if self.rarea.surfacearea > 0:
@@ -329,13 +334,13 @@ class Metrics():
         self.sim = sim
 
         # Toggle calculations and output
-        self.swmetrics = True   # Toggle metrics
-        self.swplot = True      # Toggle plot
-        self.swprint = True     # Toggle print
+        self.swmetrics = True       # Toggle metrics
+        self.swplot = True          # Toggle plot
+        self.swprint = True         # Toggle print
 
         # Time
-        self.timer0 = -9999         # force first time call, update
-        self.timer1 = -9999         # force first time call, plot
+        self.timer0 = -9999         # Force first time call, update
+        self.timer1 = -9999         # Force first time call, plot
         self.intervalmetrics = 1    # [seconds]
         self.intervalplot = 15      # [seconds]
 
@@ -371,6 +376,9 @@ class Metrics():
         self.timer0 = sim.simt  # Update time for scheduler
 
         if rarea is not None:  # Update tracking DB for research area
+            if sim.rarea.surfacearea <= 0:
+                print "Defining default research area"
+                sim.stack.stack("RAREA %f,%f,%f,%f" % (51.6,4,53,6))
             rarea.update()
 
         sim.pause() # "Lost time is never found again" - Benjamin Franklin -
@@ -407,88 +415,90 @@ class Metrics():
         ##################
         #   Histograms   #
         ##################
-        self.fig.add_subplot(231)
-        velocity = np.squeeze(sim.traf.gs)
-        plt.hist(velocity, bins=50)
-        plt.xlim(50, 450)
-        plt.title("Velocity")
-
-        self.fig.add_subplot(232)
-        dvelocity = np.sqrt(geo.dVsqr[mask]).flatten()
-        plt.hist(dvelocity, bins=50)
-        plt.xlim(-1, 800)
-        plt.title("Relative velocity")
-
-        self.fig.add_subplot(233)
-        drange = geo.qdrdist[:, :, 1][mask].flatten()
-        plt.hist(drange, bins=50)
-        plt.xlim(-1, 600)
-        plt.title("Relative distance")
-
-        self.fig.add_subplot(234)
-        dheading = geo.dhdg[mask].flatten()
-        plt.hist(dheading, bins=50)
-        plt.xlim(-180, 180)
-        plt.title("Relative bearing")
-
-        self.fig.add_subplot(235)
-        rangedot = self.rdot.rdot[mask].flatten()
-        plt.hist(rangedot, bins=50)
-        plt.xlim(-700, 700)
-        plt.title("Range rate")
+#        self.fig.add_subplot(231)
+#        velocity = np.squeeze(sim.traf.gs)
+#        plt.hist(velocity, bins=50)
+#        plt.xlim(50, 450)
+#        plt.title("Velocity")
+#
+#        self.fig.add_subplot(232)
+#        dvelocity = np.sqrt(geo.dVsqr[mask]).flatten()
+#        plt.hist(dvelocity, bins=50)
+#        plt.xlim(-1, 800)
+#        plt.title("Relative velocity")
+#
+#        self.fig.add_subplot(233)
+#        drange = geo.qdrdist[:, :, 1][mask].flatten()
+#        plt.hist(drange, bins=50)
+#        plt.xlim(-1, 600)
+#        plt.title("Relative distance")
+#
+#        self.fig.add_subplot(234)
+#        dheading = geo.dhdg[mask].flatten()
+#        plt.hist(dheading, bins=50)
+#        plt.xlim(-180, 180)
+#        plt.title("Relative bearing")
+#
+#        self.fig.add_subplot(235)
+#        rangedot = self.rdot.rdot[mask].flatten()
+#        plt.hist(rangedot, bins=50)
+#        plt.xlim(-700, 700)
+#        plt.title("Range rate")
         #######################################
         #   Evolution of averages over time   #
         #######################################
-#        histgs,histntraf,histrantraf = self.ot.gethist()
-#
-#        self.fig.add_subplot(331)
-#        plt.plot(histntraf[0,:],histntraf[1,:])
-#        plt.ylabel("#AC")
-#        plt.title("#AC evolution")
-#
-#        self.fig.add_subplot(332)
-#        plt.plot(histrantraf[0,:],histrantraf[1,:])
-#        plt.title("#AC in RA evolution")
-#        plt.ylabel("#AC")
-#
-#        self.fig.add_subplot(333)
-#        hist = self.ca.gethist()
-#        plt.plot(hist[0,:],hist[1,:])
-#        plt.title("Conflicts per AC evolution")
-#
-#        self.fig.add_subplot(334)
-#        hist = self.cr.gethist()
-#        plt.plot(hist[0,:],hist[1,:])
-#        plt.title("Cr evolution")
-#
-#        self.fig.add_subplot(335)
-#        plt.plot(histgs[0,:],histgs[1,:])
-#        plt.ylabel("m/s")
-#        plt.title("Average V evolution")
-#
-#        self.fig.add_subplot(336)
-#        hist = self.vrel.gethist()
-#        plt.plot(hist[0,:],hist[1,:])
-#        plt.ylabel("m/s")
-#        plt.title("Average dV evolution")
-#
-#        self.fig.add_subplot(337)
-#        hist = self.dhdg.gethist()
-#        plt.plot(hist[0,:],hist[1,:])
-#        plt.ylabel("deg")
-#        plt.title("Average dHDG evolution")
-#
-#        self.fig.add_subplot(338)
-#        hist = self.td.gethist()
-#        plt.plot(hist[0,:],hist[1,:])
-#        plt.ylabel("#AC/km2")
-#        plt.title("Traffic density evolution")
-#
-#        self.fig.add_subplot(339)
-#        hist = self.rdot.gethist()
-#        plt.plot(hist[0,:],hist[1,:])
-#        plt.ylabel("m/s")
-#        plt.title("Average range rate evolution")
+        if sim.rarea.surfacearea <= 0:
+            return
+        histgs,histntraf,histrantraf = self.ot.gethist()
+
+        self.fig.add_subplot(331)
+        plt.plot(histntraf[0,:],histntraf[1,:])
+        plt.ylabel("#AC")
+        plt.title("#AC evolution")
+
+        self.fig.add_subplot(332)
+        plt.plot(histrantraf[0,:],histrantraf[1,:])
+        plt.title("#AC in RA evolution")
+        plt.ylabel("#AC")
+
+        self.fig.add_subplot(333)
+        hist = self.ca.gethist()
+        plt.plot(hist[0,:],hist[1,:])
+        plt.title("Conflicts per AC evolution")
+
+        self.fig.add_subplot(334)
+        hist = self.conflictrate.gethist()
+        plt.plot(hist[0,:],hist[1,:])
+        plt.title("Cr evolution")
+
+        self.fig.add_subplot(335)
+        plt.plot(histgs[0,:],histgs[1,:])
+        plt.ylabel("m/s")
+        plt.title("Average V evolution")
+
+        self.fig.add_subplot(336)
+        hist = self.vrel.gethist()
+        plt.plot(hist[0,:],hist[1,:])
+        plt.ylabel("m/s")
+        plt.title("Average dV evolution")
+
+        self.fig.add_subplot(337)
+        hist = self.dhdg.gethist()
+        plt.plot(hist[0,:],hist[1,:])
+        plt.ylabel("deg")
+        plt.title("Average dHDG evolution")
+
+        self.fig.add_subplot(338)
+        hist = self.trafficdensity.gethist()
+        plt.plot(hist[0,:],hist[1,:])
+        plt.ylabel("#AC/km2")
+        plt.title("Traffic density evolution")
+
+        self.fig.add_subplot(339)
+        hist = self.rdot.gethist()
+        plt.plot(hist[0,:],hist[1,:])
+        plt.ylabel("m/s")
+        plt.title("Average range rate evolution")
 
         plt.draw()
         plt.show()
