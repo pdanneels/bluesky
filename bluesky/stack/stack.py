@@ -224,6 +224,16 @@ class Commandstack:
                 "onoff/int,[float]",
                 lambda *args: sim.metric.toggle(traf, *args)
             ],
+            "METRICS": [
+                "METRICS ON/OFF",
+                "onoff",
+                lambda *args: sim.metrics.toggle(*args)
+            ],
+            "MONGODB": [
+                "MONGODB ON/OFF",
+                "onoff",
+                lambda *args: sim.mdb.toggle(*args)
+            ],
             "MOVE": [
                 "MOVE acid,lat,lon,[alt,hdg,spd,vspd]",
                 "acid,latlon,[alt,hdg,spd,vspd]",

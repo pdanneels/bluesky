@@ -32,7 +32,7 @@ def process(command, numargs, cmdargs, sim, traf, scr, cmd):
         scr.wpsw = 0              #don't draw waypoints
         scr.swfir = False         #don't show FIRs
         scr.swgrid = True         #do show a grid
-        scr.pan([0, 0], True)     #focus the map at the prime meridian and equator
+        cmd.stack("PAN 0,0")      #focus the map at the prime meridian and equator
         scr.redrawradbg = True    #draw the background again
         scr.swsep = True        #show circles of seperation between ac
         scr.swspd = True        #show speed vectors of aircraft
@@ -162,7 +162,7 @@ def process(command, numargs, cmdargs, sim, traf, scr, cmd):
             scr.isoalt = 0
             traf.reset(sim.navdb)
             mperdeg = 111319.
-            hsep = traf.dbconf.R # [m] horizontal separation minimum
+            hsep = traf.asas.R # [m] horizontal separation minimum
             hseplat = hsep/mperdeg
             matsep = 1.1 #factor of extra space in the matrix
             hseplat = hseplat*matsep
@@ -228,7 +228,7 @@ def process(command, numargs, cmdargs, sim, traf, scr, cmd):
         traf.reset(sim.navdb)
         mperdeg = 111319.
         distance = 0.6 # in degrees lat/lon, for now
-        hsep = traf.dbconf.R # [m] horizontal separation minimum
+        hsep = traf.asas.R # [m] horizontal separation minimum
         hseplat = hsep/mperdeg
         wallsep = 1.1 #factor of extra space in the wall
         traf.create("OWNSHIP", "WALL", 0, -distance, 90, 20000*ft, 200)

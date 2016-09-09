@@ -10,6 +10,7 @@ import os
 
 
 def fileopen():
+    return  ""
     """returns filename of scenariofile selected"""
     cdir = os.getcwd()
 

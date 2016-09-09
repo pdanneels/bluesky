@@ -4,7 +4,7 @@ from ...stack import Commandstack
 from ... import settings
 
 from ...tools.datalog import Datalog
-from ...traf.metric2 import Metrics
+from ...traf.metrics.metric_main import Metrics
 #from ...tools.network import StackTelnetServer
 #from ...tools.datafeed import Modesbeast
 from ...tools.researcharea import Rarea

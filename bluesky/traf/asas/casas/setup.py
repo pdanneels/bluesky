@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 
-from distutils.core import setup, Extension
+from setuptools import setup, Extension
+#from distutils.core import setup, Extension
 import numpy as np
 
 ext_modules = [Extension('casas', sources=['casas.cpp'])]

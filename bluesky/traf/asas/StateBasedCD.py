@@ -73,6 +73,7 @@ def detect(dbconf, traf, simt):
 
     # Calculate distance^2 at CPA (minimum distance^2)
     dcpa2 = dbconf.dist * dbconf.dist - dbconf.tcpa * dbconf.tcpa * dv2
+    dbconf.dcpa2 = dcpa2
 
     # Check for horizontal conflict
     R2 = dbconf.R * dbconf.R

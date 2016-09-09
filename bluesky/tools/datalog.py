@@ -105,24 +105,4 @@ class Datalog():
             f = open(self.fname, "w")
             f.writelines(self.buffer)
             f.close()
-        self.savem1()                   # save metrics log 1
-        return
-
-    ###############
-    #   METRICS   #
-    ###############
-    def updatem1(self, var, val):
-        sim = self.sim
-        t = tim2txt(sim.simt)                   # Nicely formated time
-        self.writem1(t, var, val)
-        return
-
-    def writem1(self, t, var, val):
-        self.m1buffer.append(t + ";" + var + ";" + val + "\n")
-        return
-
-    def savem1(self):  # Write buffer to file
-        f = open(self.fnamem1, "w")
-        f.writelines(self.m1buffer)
-        f.close()
         return

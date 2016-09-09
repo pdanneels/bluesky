@@ -12,7 +12,6 @@ import Queue
 import time
 from ..tools.mongodb_filterpipe import getfilter
 from datetime import datetime
-import sys
 
 class MongoDB():
     def __init__(self, sim):
@@ -24,12 +23,11 @@ class MongoDB():
         PORT = '27017'
         USERNAME = 'fr24ro'
         PASSWORD = 'TVewF3HCS52U'
-        #USERNAME = 'metropolisrw'
-        #PASSWORD = 'Mq2vUNuXAwz8'
+        USERNAMEMETR = 'metropolisrw'
+        PASSWORDMETR = 'Mq2vUNuXAwz8'
         self.DB = 'fr24'
-        #self.DB = 'metropolis'
-        self.MCONNECTIONSTRING = "mongodb://"+USERNAME+":"+PASSWORD+"@"+HOST+":"+PORT+"/"+self.DB
-
+        self.DBMETR = 'metropolis'
+        
         self.timer0 = -9999
         self.INTERVALTIME = 10      # Number of seconds simtime between data processing
         self.MPAUZETIME = 2         # Number of seconds to sleep between MongoDB fetches
@@ -38,36 +36,44 @@ class MongoDB():
         self.fetchstart = 0         # Start time fetching data from server
         self.fetchfin = 0           # Finish time fetching data from server
 
-        self.MODE = 'live'          # Mode, can be 'live' or 'replay'
-        replaystart = '2016_06_29:12_30'  # Set to time you want to start replay "%Y_%m_%d:%H_%M"
+        self.MODE = 'live'          # Mode, can be 'live', 'replay' or 'metropolis'
+        replaystart = '2016_08_21:10_30'  # Set to time you want to start replay "%Y_%m_%d:%H_%M"
         metropoliscollection = 'OFF_FULLMIX_SET1_SNAP_fm_morninghgh_cr_off_ii_1407112255'
-        
+
         if self.MODE == 'replay':
+            self.MCONNECTIONSTRING = "mongodb://"+USERNAME+":"+PASSWORD+"@"+HOST+":"+PORT+"/"+self.DB
             self.STARTTIME = time.mktime(datetime.strptime(replaystart, "%Y_%m_%d:%H_%M").timetuple())
             self.COLL = 'EHAM_' + replaystart[:10]
-            print "Starting replay mode."
-            print "Connecting to collection: %s at %s" % \
+            self.connectionoutput = "Connecting to collection: %s at %s" % \
                     (self.COLL, str(datetime.fromtimestamp(self.STARTTIME)))
-
         elif self.MODE == 'metropolis':
-            print "Starting metropolis mode"
+            self.MCONNECTIONSTRING = "mongodb://"+USERNAMEMETR+":"+PASSWORDMETR+"@"+HOST+":"+PORT+"/"+self.DBMETR
             self.COLL = metropoliscollection
 
         elif self.MODE == 'live':
+            self.MCONNECTIONSTRING = "mongodb://"+USERNAME+":"+PASSWORD+"@"+HOST+":"+PORT+"/"+self.DB
             self.STARTTIME = time.time()
             self.COLL = 'EHAM_' + datetime.utcnow().strftime("%Y_%m_%d")
-            print "Starting live mode."
-            print "Connecting to collection: %s at UTC now." % self.COLL
-
+            self.connectionoutput = "Connecting to collection: %s at UTC now." % self.COLL
         else:
             print "No MongoDB connection mode defined."
-
+        
+        self.MDBrun = threading.Event()
         self.dataqueue = Queue.Queue(maxsize=0)
-        self.mdbthread()
+
+    def toggle(self, flag):
+        if flag:
+            print "Starting %s mode." % self.MODE
+            print self.connectionoutput
+            self.mdbthread()
+            self.sim.reset()
+        else:
+            self.MDBrun.clear()
 
     def mdbthread(self):
         """ This function starts a background process for constant data fetching """
         MCOLL = self.connectmdb()
+        self.MDBrun.set()
         thread = threading.Thread(target=self.getmdbdata, args=(MCOLL,))
         thread.daemon = True
         thread.start()
@@ -85,10 +91,12 @@ class MongoDB():
 
     def getmdbdata(self, MCOLL):
         """ This function collects data from the mongoDB server """
-
         if self.MODE == 'metropolis':
             self.STARTTIME = MCOLL.find_one(sort=[('ts', 1)])['ts']
         while True:
+            if not self.MDBrun.is_set():
+                print "MongoDB connector thread suspended"
+            self.MDBrun.wait()
             if self.MODE == 'replay':
                 mintime = self.STARTTIME + self.sim.simt - self.TIMECHUNK
                 maxtime = self.STARTTIME + self.sim.simt
@@ -99,8 +107,8 @@ class MongoDB():
                 mintime = self.STARTTIME
                 maxtime = 0
 
-            filterpipe = getfilter(self.MODE, mintime, maxtime)            
-            
+            filterpipe = getfilter(self.MODE, mintime, maxtime)
+
             self.fetchstart = time.time()
             filtereddata = list(MCOLL.aggregate(filterpipe))
             if len(filtereddata) > 0:
