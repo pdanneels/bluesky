@@ -20,7 +20,7 @@ class MongoDB():
         self.stack = sim.stack
 
         HOST = 'danneels.nl'
-        PORT = '27017'
+        PORT = '27018'
         USERNAME = 'fr24ro'
         PASSWORD = 'TVewF3HCS52U'
         USERNAMEMETR = 'metropolisrw'

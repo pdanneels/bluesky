@@ -6,6 +6,7 @@ import os
 from time import strftime, gmtime
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
+from scipy.stats import gaussian_kde
 
 # To ignore numpy errors:
 #     pylint: disable=E1101
@@ -38,49 +39,93 @@ class MetricsPlot():
             + strftime("%Y-%m-%d-%H-%M-%S-BlueSky3D.png", gmtime())
             self.fig3d.savefig(fname, transparent=True)
 
-    def plotddd(self, rdot):
+    def plot3d(self, rdot):
         """ Plots 3D map """
         traf = self.sim.traf
         self.fig3d = plt.figure()
         axis = self.fig3d.add_subplot(111, projection='3d')
-        dcpamasked, tcpamasked, rdotmasked = self._dddfilter_(traf.asas.dcpa2, \
-                                                traf.asas.tcpa, rdot.rdot)
-        colorvalue = rdotmasked/(dcpamasked*tcpamasked)
-#        colormapping = np.ones(colorvalue.shape)
-#        for i in colorvalue:
-#            if colorvalue[i] < -8. or colorvalue[i] > 0.:
-#                colormapping[i] = 'g'
-#            else:
-#                colormapping[i] = 'r'
-        
-        axis.scatter(dcpamasked, tcpamasked, rdotmasked, cmap='RdYlGn', c=colorvalue)
-        axis.set_xlim3d(0, 100)
-        axis.set_ylim3d(0, 900)
+        dcpa = self.dcpa2todcpa(traf.asas.dcpa2)
+        self._boxquantities_(dcpa, traf.asas.tcpa, rdot.rdot)
+        dcpamasked, tcpamasked, rdotmasked, colorarray = \
+                        self._3dfilter_(dcpa, traf.asas.tcpa, rdot.rdot)
+
+        axis.scatter(dcpamasked, tcpamasked, rdotmasked, c=colorarray.flatten().tolist())
+        axis.set_xlim3d(0, 50)
+        axis.set_ylim3d(0, 300)
         axis.set_zlim3d(-1000, 1000)
         axis.set_xlabel('dcpa')
         axis.set_ylabel('tcpa')
         axis.set_zlabel('rdot')
-        
+
         plt.hold(True)
-        x_surf=np.arange(0, 100, 10)
-        y_surf=np.arange(0, 900, 90)
+        x_surf = np.arange(0, 50, 5)
+        y_surf = np.arange(0, 300, 30)
         x_surf, y_surf = np.meshgrid(x_surf, y_surf)
         z_surf = np.zeros(x_surf.shape)
-        axis.plot_surface(x_surf, y_surf, z_surf, cmap=cm.hot, alpha=0.2);
-        
+        axis.plot_surface(x_surf, y_surf, z_surf, cmap=cm.hot, alpha=0.2)
+
         figmanager = plt.get_current_fig_manager()
         figmanager.window.showMaximized()
         plt.show()
 
+    def _boxquantities_(self, dcpa, tcpa, rdot):
+        """ Print the number of AC in each box """
+        traf = self.sim.traf
+        ntrafsq = traf.ntraf*traf.ntraf
+        ntrafsqvalid = ntrafsq / 2 - traf.ntraf
+        mask = np.ones(dcpa.shape, dtype=bool)
+        print "Unfiltered datapoints: %i / %i" % (np.count_nonzero(mask), ntrafsqvalid)
+        mask = np.greater(dcpa, 0) & np.greater(tcpa, 0)
+        print "Future collisions: %i / %i" % (np.count_nonzero(mask), ntrafsqvalid)
+        mask = np.greater(dcpa, 0) & np.greater(tcpa, 0) & np.less(tcpa, 300)
+        print "TCPA less than 5min: %i / %i)" % (np.count_nonzero(mask), ntrafsqvalid)
+        mask = np.greater(dcpa, 0) & np.less(dcpa, 50) & np.greater(tcpa, 0)
+        print "DCPA less than 50NM: %i / %i)" % (np.count_nonzero(mask), ntrafsqvalid)
+        mask = np.greater(dcpa, 0) & np.less(dcpa, 20) & np.greater(tcpa, 0) & np.less(tcpa, 300)
+        print "Combine max DCPA and TCPA: %i / %i)" % (np.count_nonzero(mask), ntrafsqvalid)
+
     @staticmethod
-    def _dddfilter_(dcpa2, tcpa, rdot):
+    def dcpa2todcpa(dcpa2):
+        """ Convert DCPA2 to DCPA """
+        return np.sqrt(dcpa2)/1852.
+
+    @staticmethod
+    def _colorboxes_(dcpa, tcpa, rdot):
+        """ Return array with colors for data points """
+        colorarray = np.chararray(rdot.shape)
+        colorarray[:] = 'b'
+        mask = np.greater(rdot, 0)
+        colorarray[mask] = 'g'
+        mask = np.less(rdot, 0) & np.less(dcpa, 15) & np.less(tcpa, 300)
+        colorarray[mask] = 'y'
+        mask = np.greater(dcpa, 0) & np.less(dcpa, 10) & \
+                np.greater(tcpa, 0) & np.less(tcpa, 60) & np.less(rdot, -25)
+        colorarray[mask] = 'r'
+        return colorarray
+    
+    def _3dfilter_(self, dcpa, tcpa, rdot):
         """ Filters irrelevant data before 3D plot """
-        mask = np.ones(dcpa2.shape, dtype=bool)
+        mask = np.ones(dcpa.shape, dtype=bool)
         # mask = np.greater(tcpa, 0) & np.less(tcpa, 1800)
-        dcpa = np.sqrt(dcpa2)/1852.
-        mask = np.greater(dcpa, 0) & np.less(dcpa, 100) & np.greater(tcpa, 0) & np.less(tcpa, 900)
+        mask = np.greater(dcpa, 0) & np.less(dcpa, 50) & np.greater(tcpa, 0) & np.less(tcpa, 300)
         np.fill_diagonal(mask, 0)
-        return dcpa[mask], tcpa[mask], rdot[mask]
+        colorarray = self._colorboxes_(dcpa, tcpa, rdot)
+        return dcpa[mask], tcpa[mask], rdot[mask], colorarray[mask]
+    
+    @staticmethod
+    def _densitymap_(x, y):
+        """ Input x, y of data points. Returns x, y ,z sorted by z(density) """
+        xy = np.vstack([x,y])
+        z = gaussian_kde(xy)(xy)
+        idx = z.argsort()
+        return x[idx], y[idx], z[idx]
+    
+    @staticmethod
+    def _2dfilter_(x, xlow, xhigh, y, ylow, yhigh):
+        mask = np.ones(x.shape, dtype=bool)
+        mask = np.greater(x, xlow) & np.less(x, xhigh) & np.greater(y, ylow) & np.less(y, yhigh)
+        np.triu(mask, 1)
+        return x[mask].flatten(), y[mask].flatten()
 
     def plotdynamicdensity(self, geo, rdot):
         """ Plot Dynamic Density Map """
@@ -88,40 +133,56 @@ class MetricsPlot():
 
         self.figdd = plt.figure()
         distance = geo.qdrdist[:, :, 1]
-        self.figdd.add_subplot(221)
-        size, _ = distance.shape
-        mask = np.triu_indices(size, 1)
-        plt.scatter(sim.traf.asas.tcpa[mask], distance[mask])
-        plt.ylim(-1, 150)
-        plt.xlim(-1, 1800)
-        plt.xlabel(r'$t [s]$')
-        plt.ylabel(r'$R [NM]$')
-        plt.title("Range vs time to CPA")
 
-        self.figdd.add_subplot(222)
-        plt.scatter(sim.traf.asas.tcpa[mask], np.square(distance[mask]))
-        plt.ylim(-1, 22500)
-        plt.xlim(-1, 1800)
-        plt.xlabel(r'$t [s]$')
-        plt.ylabel(r'$R^2 [NM^2]$')
-        plt.title("Range squared vs time to CPA")
+        #size, _ = distance.shape
+        #mask = np.triu_indices(size, 1)
+        xlow = -1; xhigh = 150; ylow = -1; yhigh = 300
+        xrnge = (xhigh - xlow)*.1; yrnge = (yhigh - ylow)*.1
+        axis = self.figdd.add_subplot(221)
+        xmasked, ymasked = self._2dfilter_(sim.traf.asas.tcpa, xlow-xrnge, xhigh+xrnge, distance, ylow-yrnge, yhigh+yrnge)
+        x, y, z = self._densitymap_(xmasked, ymasked)
+        axis.scatter(x, y, c=z, s=50, edgecolor='')
+        axis.set_xlim(xlow, xhigh)
+        axis.set_ylim(ylow, yhigh)
+        axis.set_xlabel(r'$t [s]$')
+        axis.set_ylabel(r'$R [NM]$')
+        axis.set_title("Range vs time to CPA")
 
-        self.figdd.add_subplot(223)
-        plt.scatter(sim.traf.asas.tcpa[mask], rdot.rdot[mask])
-        plt.ylim(-1000, 1000)
-        plt.xlim(-1, 10000)
-        plt.xlabel(r'$t [s]$')
-        plt.ylabel(r'$\.r [m/s]$')
-        plt.title("Range rate vs time to CPA")
+        xlow = -1; xhigh = 300; ylow = -1; yhigh = 22500
+        xrnge = (xhigh - xlow)*.1; yrnge = (yhigh - ylow)*.1
+        axis = self.figdd.add_subplot(222)
+        xmasked, ymasked = self._2dfilter_(sim.traf.asas.tcpa, xlow-xrnge, xhigh+xrnge, np.square(distance), ylow-yrnge, yhigh+yrnge)
+        x, y, z = self._densitymap_(xmasked, ymasked)
+        axis.scatter(x, y, c=z, s=50, edgecolor='')
+        axis.set_xlim(xlow, xhigh)
+        axis.set_ylim(ylow, yhigh)
+        axis.set_xlabel(r'$t [s]$')
+        axis.set_ylabel(r'$R^2 [NM^2]$')
+        axis.set_title("Range squared vs time to CPA")
 
-        self.figdd.add_subplot(224)
-        plt.scatter(sim.traf.asas.tcpa[mask], \
-                    np.sqrt(sim.traf.asas.dcpa2[mask])/1852.)
-        plt.ylim(-1, 800)
-        plt.xlim(-1, 20000)
-        plt.xlabel(r'$t [s]$')
-        plt.ylabel(r'$R [NM]$')
-        plt.title("Range at CPA vs time to CPA")
+        xlow = -1; xhigh = 300; ylow = -1000; yhigh = 1000
+        xrnge = (xhigh - xlow)*.1; yrnge = (yhigh - ylow)*.1
+        axis = self.figdd.add_subplot(223)
+        xmasked, ymasked = self._2dfilter_(sim.traf.asas.tcpa, xlow-xrnge, xhigh+xrnge, rdot.rdot, ylow-yrnge, yhigh+yrnge)
+        x, y, z = self._densitymap_(xmasked, ymasked)
+        axis.scatter(x, y, c=z, s=50, edgecolor='')
+        axis.set_xlim(xlow, xhigh)
+        axis.set_ylim(ylow, yhigh)
+        axis.set_xlabel(r'$t [s]$')
+        axis.set_ylabel(r'$\.r [m/s]$')
+        axis.set_title("Range rate vs time to CPA")
+
+        xlow = -1; xhigh = 1800; ylow = -1; yhigh = 300
+        xrnge = (xhigh - xlow)*.1; yrnge = (yhigh - ylow)*.1
+        axis = self.figdd.add_subplot(224)
+        xmasked, ymasked = self._2dfilter_(sim.traf.asas.tcpa, xlow-xrnge, xhigh+xrnge, self.dcpa2todcpa(sim.traf.asas.dcpa2), ylow-yrnge, yhigh+yrnge)
+        x, y, z = self._densitymap_(xmasked, ymasked)
+        axis.scatter(x, y, c=z, s=50, edgecolor='')
+        axis.set_xlim(xlow, xhigh)
+        axis.set_ylim(ylow, yhigh)
+        axis.set_xlabel(r'$t [s]$')
+        axis.set_ylabel(r'$R [NM]$')
+        axis.set_title("Range at CPA vs time to CPA")
 
         figmanager = plt.get_current_fig_manager()
         figmanager.window.showMaximized()

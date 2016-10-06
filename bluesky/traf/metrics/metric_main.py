@@ -225,10 +225,12 @@ class Metrics():
             if abs(sim.simt-self.timer1) < self.intervalplot:
                 sim.start() # "The show must go on" - Freddie Mercury, Queen -
                 return
+            if self.swsingleshot:
+                sim.mdb.MDBrun.clear() # free up resources
             self.timer1 = sim.simt
             plot.plothistograms(geo, self.rdot)
             plot.plotdynamicdensity(geo, self.rdot)
-            plot.plotddd(self.rdot)
+            plot.plot3d(self.rdot)
 
         if self.swstats: # Stats
             stats.printstats(geo, self.rdot)
@@ -236,7 +238,6 @@ class Metrics():
         if not self.swsingleshot:
             sim.start() # "The show must go on" - Freddie Mercury, Queen -
         else:
-            sim.mdb.MDBrun.clear()
             log.update("Number of AC: " + str(sim.traf.ntraf), \
                 "Number of conflicts: " + str(sim.traf.asas.nconf / 2))
             log.update("------------------------------------------------", "")
