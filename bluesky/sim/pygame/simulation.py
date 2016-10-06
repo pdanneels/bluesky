@@ -1,12 +1,15 @@
 import time
-from ...tools import datalog, areafilter
 from ...traf import Traffic
-from ... import stack
-from ...traf.metric import Metric
-
-from ...tools.network import StackTelnetServer
+from ...stack import Commandstack
 from ... import settings
-from ...tools.datafeed import Modesbeast
+from ... import stack
+from ...tools import datalog, areafilter
+#from ...traf.metric import Metric
+from ...traf.metrics.metric_main import Metrics
+#from ...tools.network import StackTelnetServer
+#from ...tools.datafeed import Modesbeast
+from ...tools.researcharea import Rarea
+from ...tools.mongodb_connector import MongoDB
 
 
 class Simulation:
@@ -29,13 +32,13 @@ class Simulation:
 
     def __init__(self, gui, navdb):
         # simmode
-        self.mode   = self.init
+        self.mode = self.init
 
-        self.simt   = 0.0   # Runtime
-        self.tprev  = 0.0
-        self.syst0  = 0.0
-        self.dt     = 0.0
-        self.syst   = 0.0   # system time
+        self.simt = 0.0   # Runtime
+        self.tprev = 0.0
+        self.syst0 = 0.0
+        self.dt = 0.0
+        self.syst = 0.0   # system time
 
         # Directories
         self.datadir = "./data/"
@@ -47,14 +50,18 @@ class Simulation:
         self.ffstop = -1.    # Indefinitely
 
         # Simulation objects
-        self.traf  = Traffic(navdb)
+        self.traf = Traffic(navdb)
         self.navdb = navdb
-        self.metric = Metric()
         self.stack = stack.init(self, self.traf, gui.scr)
-
+        
         # Additional modules
-        self.beastfeed   = Modesbeast(self.traf)
-        self.telnet_in   = StackTelnetServer()
+		self.datalog = datalog(self)
+        self.beastfeed = None # Modesbeast(self.stack, self.traf)
+        self.telnet_in = None # StackTelnetServer(self.stack)
+        self.rarea = Rarea(self, gui.scr)
+        self.metric = None # Metric() OLD MODULE
+        self.metrics = Metrics(self)
+        self.mdb = MongoDB(self)
 
         # Initialize the stack module once
         stack.init(self, self.traf, gui.scr)
@@ -72,7 +79,7 @@ class Simulation:
             # Not fast forward: variable dt
             if not self.ffmode:
                 self.tprev = self.simt
-                self.simt     = self.syst - self.syst0
+                self.simt = self.syst - self.syst0
                 self.dt = self.simt - self.tprev
 
                 # Protect against incidental dt's larger than 1 second,
@@ -85,7 +92,7 @@ class Simulation:
             # Fast forward: fixed dt until ffstop time, goto pause
             else:
                 self.dt = self.fixdt
-                self.simt = self.simt+self.fixdt
+                self.simt = self.simt + self.fixdt
                 self.syst0 = self.syst - self.simt
                 if self.ffstop > 0. and self.simt >= self.ffstop:
                     self.ffmode = False
@@ -97,12 +104,17 @@ class Simulation:
             # For measuring game loop frequency
             self.dts.append(self.dt)
             if len(self.dts) > 20:
-                    del self.dts[0]
+                del self.dts[0]
 
             stack.checkfile(self.simt)
 
             # Update the Mode-S beast parsing
-            self.beastfeed.update()
+            if self.beastfeed is not None:
+                self.beastfeed.update()
+
+            # Update the MongoDB feed
+            if self.mdb is not None:
+                self.mdb.update()
 
         # Always process stack
         stack.process(self, self.traf, scr)
@@ -111,14 +123,16 @@ class Simulation:
             self.traf.update(self.simt, self.dt)
 
             # Update metrics
-            self.metric.update(self)
+            if self.metrics is not None:
+                self.metrics.update()
 
             # Update loggers
-            datalog.postupdate()
+            if self.datalog is not None:
+                datalog.postupdate()
 
         # HOLD/Pause mode
         else:
-            self.syst0 = self.syst-self.simt
+            self.syst0 = self.syst - self.simt
             self.dt = 0.0
 
         return

@@ -304,4 +304,3 @@ def APorASAS(dbconf, traf):
         # have completed their flights (and have been deleted)
         else:
             dbconf.conflist_all.remove(conflict)        
-            

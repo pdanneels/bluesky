@@ -12,10 +12,13 @@ from simevents import StackTextEventType, BatchEventType, BatchEvent, SimStateEv
 from ...traf import Traffic
 from ...navdb import Navdatabase
 from ... import stack
-from ...traf import Metric
+#from ...traf import Metric
 from ... import settings
-from ...tools.datafeed import Modesbeast
+#from ...tools.datafeed import Modesbeast
 from ...tools import datalog, areafilter
+from ...traf.metric2 import Metrics
+from ...tools.researcharea import Rarea
+from ...tools.mongodb_connector import MongoDB
 
 
 class Simulation(QObject):
@@ -61,8 +64,11 @@ class Simulation(QObject):
         self.traf        = Traffic(self.navdb)
 
         # Additional modules
-        self.metric      = Metric()
-        self.beastfeed   = Modesbeast(self.traf)
+        self.beastfeed = None # Modesbeast(self.traf)
+        self.rarea = Rarea(self, self.screenio)
+        self.metric = None # Metrics() OLD MODULE
+        self.metrics = Metrics(self)
+        self.mdb = MongoDB(self)
 
         # Initialize the stack module once
         stack.init(self, self.traf, self.screenio)
@@ -79,7 +85,12 @@ class Simulation(QObject):
             self.screenio.update()
 
             # Update the Mode-S beast parsing
-            self.beastfeed.update()
+            if self.beastfeed is not None:
+                self.beastfeed.update()
+
+            # Update the MongoDB feed
+            if self.mdb is not None:
+                self.mdb.update()
 
             # Simulation starts as soon as there is traffic, or pending commands
             if self.state == Simulation.init:
@@ -100,7 +111,7 @@ class Simulation(QObject):
                 self.traf.update(self.simt, self.simdt)
 
                 # Update metrics
-                self.metric.update(self)
+                self.metrics.update()
 
                 # Update loggers
                 datalog.postupdate()

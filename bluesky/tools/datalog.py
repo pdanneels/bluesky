@@ -191,32 +191,6 @@ class CSVLogger:
                 if nrows == 0:
                     return
                 txtdata = [nrows * [str(self.simt)]] + [col2txt(col) for col in varlist]
-            else:
-                txtdata = [str(self.simt)] + [num2txt(col) for col in varlist]
-
-            # log the data to file
-            np.savetxt(self.file, np.vstack(txtdata).T, delimiter=',', newline='\n', fmt='%s')
-
-    def reset(self):
-        self.dt         = self.default_dt
-        self.tlog       = 0.0
-        self.selvars    = self.allvars
-        if self.file:
-            self.file.close()
-            self.file   = None
-
-    def listallvarnames(self):
-        ret = []
-        for logset in self.allvars:
-            ret.append(str.join(', ', logset[1]))
-        return str.join(', ', ret)
-
-    def stackio(self, *args):
-        if len(args) == 0:
-            text = 'This is '
-            if self.name in periodicloggers:
-                text += 'a periodic logger, with an update interval of %.2f seconds.\n' % self.dt
-            else:
                 text += 'a non-periodic logger.\n'
             text += self.name + ' is ' + ('ON' if self.isopen() else 'OFF') + \
                 '\nUsage: ' + self.name + ' ON/OFF,[dt] or LISTVARS or SELECTVARS var1,...,varn'
