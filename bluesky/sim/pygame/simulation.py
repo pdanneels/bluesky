@@ -1,6 +1,5 @@
 import time
 from ...traf import Traffic
-from ...stack import Commandstack
 from ... import settings
 from ... import stack
 from ...tools import datalog, areafilter
@@ -55,7 +54,7 @@ class Simulation:
         self.stack = stack.init(self, self.traf, gui.scr)
         
         # Additional modules
-		self.datalog = datalog(self)
+        self.datalog = datalog(self)
         self.beastfeed = None # Modesbeast(self.stack, self.traf)
         self.telnet_in = None # StackTelnetServer(self.stack)
         self.rarea = Rarea(self, gui.scr)
