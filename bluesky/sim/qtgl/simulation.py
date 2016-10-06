@@ -11,11 +11,11 @@ from screenio import ScreenIO
 from simevents import StackTextEventType, BatchEventType, BatchEvent, SimStateEvent, SimQuitEventType
 from ...traf import Traffic
 from ...navdb import Navdatabase
-from ...stack import Commandstack
+from ... import stack
 from ...traf import Metric
 from ... import settings
 from ...tools.datafeed import Modesbeast
-from ...tools.datalog import Datalog
+from ...tools import datalog, areafilter
 
 
 class Simulation(QObject):
@@ -55,26 +55,26 @@ class Simulation(QObject):
         self.ffmode      = False
         self.ffstop      = None
 
-        # If available, name of the currently running scenario
-        self.scenname    = 'Untitled'
-
-        # Create datalog instance
-        self.datalog = Datalog(self)
-
         # Simulation objects
         self.navdb       = Navdatabase('global')
         self.screenio    = ScreenIO(self, manager)
         self.traf        = Traffic(self.navdb)
-        self.stack       = Commandstack(self, self.traf, self.screenio)
+
         # Additional modules
         self.metric      = Metric()
-        self.beastfeed   = Modesbeast(self.stack, self.traf)
+        self.beastfeed   = Modesbeast(self.traf)
+
+        # Initialize the stack module once
+        stack.init(self, self.traf, self.screenio)
 
     def doWork(self):
         self.syst  = int(time.time() * 1000.0)
         self.fixdt = self.simdt
 
         while self.running:
+            # Datalog pre-update (communicate current sim time to loggers)
+            datalog.preupdate(self.simt)
+
             # Update screen logic
             self.screenio.update()
 
@@ -83,26 +83,27 @@ class Simulation(QObject):
 
             # Simulation starts as soon as there is traffic, or pending commands
             if self.state == Simulation.init:
-                if self.traf.ntraf > 0 or len(self.stack.scencmd) > 0:
+                if self.traf.ntraf > 0 or len(stack.get_scendata()[0]) > 0:
                     self.start()
                     if self.benchdt > 0.0:
                         self.fastforward(self.benchdt)
                         self.bencht = time.time()
 
             if self.state == Simulation.op:
-                self.stack.checkfile(self.simt)
+                stack.checkfile(self.simt)
 
             # Always update stack
-            self.stack.process(self, self.traf, self.screenio)
+            stack.process(self, self.traf, self.screenio)
 
             if self.state == Simulation.op:
+
                 self.traf.update(self.simt, self.simdt)
 
                 # Update metrics
                 self.metric.update(self)
 
-                # Update log
-                self.datalog.update(self)
+                # Update loggers
+                datalog.postupdate()
 
                 # Update time for the next timestep
                 self.simt += self.simdt
@@ -132,7 +133,7 @@ class Simulation(QObject):
 
     def stop(self):
         self.state   = Simulation.end
-        self.datalog.save()
+        datalog.reset()
 
     def start(self):
         if self.ffmode:
@@ -147,9 +148,10 @@ class Simulation(QObject):
         self.simt     = 0.0
         self.state    = Simulation.init
         self.ffmode   = False
-        self.scenname = 'Untitled'
         self.traf.reset(self.navdb)
-        self.stack.reset()
+        stack.reset()
+        datalog.reset()
+        areafilter.reset()
         self.screenio.reset()
 
     def quit(self):
@@ -177,13 +179,9 @@ class Simulation(QObject):
             self.ffstop = None
 
     def benchmark(self, fname='IC', dt=300.0):
-        self.stack.ic(self.screenio, self, fname)
+        stack.ic(self.screenio, self, fname)
         self.bencht  = 0.0  # Start time will be set at next sim cycle
         self.benchdt = dt
-
-    def scenarioInit(self, name):
-        self.screenio.echo('Starting scenario ' + name)
-        self.scenname = name
 
     def sendState(self):
         self.manager.sendEvent(SimStateEvent(self.state))
@@ -193,9 +191,12 @@ class Simulation(QObject):
 
     def batch(self, filename):
         # The contents of the scenario file are meant as a batch list: send to manager and clear stack
-        self.stack.openfile(filename)
-        self.manager.sendEvent(BatchEvent(self.stack.scentime, self.stack.scencmd))
+        result = stack.openfile(filename)
+        scentime, scencmd = stack.get_scendata()
+        if result is True:
+            self.manager.sendEvent(BatchEvent(scentime, scencmd))
         self.reset()
+        return result
 
     def event(self, event):
         # Keep track of event processing
@@ -203,14 +204,13 @@ class Simulation(QObject):
 
         if event.type() == StackTextEventType:
             # We received a single stack command. Add it to the existing stack
-            self.stack.stack(event.cmdtext)
+            stack.stack(event.cmdtext)
             event_processed = True
 
         elif event.type() == BatchEventType:
             # We are in a batch simulation, and received an entire scenario. Assign it to the stack.
             self.reset()
-            self.stack.scentime = event.scentime
-            self.stack.scencmd  = event.scencmd
+            stack.set_scendata(event.scentime, event.scencmd)
             self.start()
             event_processed     = True
         elif event.type() == SimQuitEventType:
