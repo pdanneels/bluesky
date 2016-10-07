@@ -136,7 +136,7 @@ class MetricsPlot():
 
         #size, _ = distance.shape
         #mask = np.triu_indices(size, 1)
-        xlow = -1; xhigh = 150; ylow = -1; yhigh = 300
+        xlow = -1; xhigh = 300; ylow = -1; yhigh = 300
         xrnge = (xhigh - xlow)*.1; yrnge = (yhigh - ylow)*.1
         axis = self.figdd.add_subplot(221)
         xmasked, ymasked = self._2dfilter_(sim.traf.asas.tcpa, xlow-xrnge, xhigh+xrnge, distance, ylow-yrnge, yhigh+yrnge)
@@ -172,7 +172,7 @@ class MetricsPlot():
         axis.set_ylabel(r'$\.r [m/s]$')
         axis.set_title("Range rate vs time to CPA")
 
-        xlow = -1; xhigh = 1800; ylow = -1; yhigh = 300
+        xlow = -1; xhigh = 300; ylow = -1; yhigh = 300
         xrnge = (xhigh - xlow)*.1; yrnge = (yhigh - ylow)*.1
         axis = self.figdd.add_subplot(224)
         xmasked, ymasked = self._2dfilter_(sim.traf.asas.tcpa, xlow-xrnge, xhigh+xrnge, self.dcpa2todcpa(sim.traf.asas.dcpa2), ylow-yrnge, yhigh+yrnge)

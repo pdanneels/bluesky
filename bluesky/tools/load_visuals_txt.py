@@ -1,4 +1,6 @@
 from ..settings import gui, data_path
+from math import cos, radians, degrees, sqrt, atan2, sin, asin
+from zipfile import ZipFile
 
 REARTH_INV = 1.56961231e-7
 
@@ -68,8 +70,6 @@ if gui == 'qtgl':
 
     import OpenGL.GLU as glu
     import numpy as np
-    from math import cos, radians, degrees, sqrt, atan2, sin, asin
-    from zipfile import ZipFile
 
     tess = glu.gluNewTess()
     glu.gluTessCallback(tess, glu.GLU_TESS_VERTEX_DATA, lambda vertex, vbuf: vbuf.extend(vertex[0:2]))

@@ -54,7 +54,6 @@ class Simulation:
         self.stack = stack.init(self, self.traf, gui.scr)
         
         # Additional modules
-        self.datalog = datalog(self)
         self.beastfeed = None # Modesbeast(self.stack, self.traf)
         self.telnet_in = None # StackTelnetServer(self.stack)
         self.rarea = Rarea(self, gui.scr)
@@ -126,8 +125,7 @@ class Simulation:
                 self.metrics.update()
 
             # Update loggers
-            if self.datalog is not None:
-                datalog.postupdate()
+            datalog.postupdate()
 
         # HOLD/Pause mode
         else:
