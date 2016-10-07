@@ -1,9 +1,9 @@
 import time
 from ...traf import Traffic
-from ...stack import Commandstack
 from ... import settings
-
-from ...tools.datalog import Datalog
+from ... import stack
+from ...tools import datalog, areafilter
+#from ...traf.metric import Metric
 from ...traf.metrics.metric_main import Metrics
 #from ...tools.network import StackTelnetServer
 #from ...tools.datafeed import Modesbeast
@@ -51,20 +51,18 @@ class Simulation:
         # Simulation objects
         self.traf = Traffic(navdb)
         self.navdb = navdb
-
-        self.datalog = Datalog(self)
-
-        # Stack ties it together
-        self.stack = Commandstack(self, self.traf, gui.scr)
-
-        # Optional modules
+        self.stack = stack.init(self, self.traf, gui.scr)
+        
+        # Additional modules
         self.beastfeed = None # Modesbeast(self.stack, self.traf)
         self.telnet_in = None # StackTelnetServer(self.stack)
         self.rarea = Rarea(self, gui.scr)
+        self.metric = None # Metric() OLD MODULE
         self.metrics = Metrics(self)
         self.mdb = MongoDB(self)
 
-        return
+        # Initialize the stack module once
+        stack.init(self, self.traf, gui.scr)
 
     def update(self, scr):
 
@@ -98,12 +96,15 @@ class Simulation:
                     self.ffmode = False
                     self.mode = self.hold
 
+            # Datalog pre-update (communicate current sim time to loggers)
+            datalog.preupdate(self.simt)
+
             # For measuring game loop frequency
             self.dts.append(self.dt)
             if len(self.dts) > 20:
                 del self.dts[0]
 
-            self.stack.checkfile(self.simt)
+            stack.checkfile(self.simt)
 
             # Update the Mode-S beast parsing
             if self.beastfeed is not None:
@@ -114,7 +115,7 @@ class Simulation:
                 self.mdb.update()
 
         # Always process stack
-        self.stack.process(self, self.traf, scr)
+        stack.process(self, self.traf, scr)
 
         if self.mode == Simulation.op:
             self.traf.update(self.simt, self.dt)
@@ -123,9 +124,8 @@ class Simulation:
             if self.metrics is not None:
                 self.metrics.update()
 
-            # Update log
-#            if self.datalog is not None:
-#                self.datalog.update()
+            # Update loggers
+            datalog.postupdate()
 
         # HOLD/Pause mode
         else:
@@ -155,8 +155,9 @@ class Simulation:
         return
 
     def stop(self):  # Quit mode
-        self.mode = self.end
-        self.datalog.save()
+        self.mode   = self.end
+        datalog.reset()        
+#        datalog.save()
         return
 
     def start(self):  # Back to op-mode: run after HOLD/PAUSE
@@ -190,3 +191,6 @@ class Simulation:
         self.simt = 0.0
         self.mode = self.init
         self.traf.reset(self.navdb)
+        datalog.reset()
+        areafilter.reset()
+

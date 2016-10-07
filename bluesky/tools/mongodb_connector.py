@@ -10,14 +10,15 @@ import pymongo
 import threading
 import Queue
 import time
-from ..tools.mongodb_filterpipe import getfilter
 from datetime import datetime
+from ..tools.mongodb_filterpipe import getfilter
+from .. import stack
 
 class MongoDB():
     def __init__(self, sim):
         self.sim = sim
         self.traf = sim.traf
-        self.stack = sim.stack
+        self.add_stack_commands(sim)
 
         HOST = 'danneels.nl'
         PORT = '27018'
@@ -60,6 +61,13 @@ class MongoDB():
         
         self.MDBrun = threading.Event()
         self.dataqueue = Queue.Queue(maxsize=0)
+    
+    def add_stack_commands(self, sim):
+        cmddict = {"MONGODB": [
+                    "MONGODB ON/OFF",
+                    "onoff",
+                    lambda *args: sim.mdb.toggle(*args)]}
+        stack.append_commands(cmddict)
 
     def toggle(self, flag):
         if flag:
@@ -133,24 +141,24 @@ class MongoDB():
                     cmdstr = 'CRE %s, %s, %f, %f, %f, %d, %d' % \
                             (acid, pos['mdl'], pos['loc']['lat'], \
                             pos['loc']['lng'], pos['hdg'], pos['alt'], pos['spd'])
-                    self.stack.stack(cmdstr)
+                    stack.stack(cmdstr)
                     createcount = createcount + 1
             else:
                 if self.STARTTIME + self.sim.simt - pos['ts'] - delay > self.LOSTSIGNALTIMOUT:
                     print "Lost signal for %s %s seconds" % \
                             (pos['icao'], str(int(self.STARTTIME + self.sim.simt - pos['ts'])))
-                    self.stack.stack('DEL %s' % pos['icao'])
+                    stack.stack('DEL %s' % pos['icao'])
                 else:
                     if self.STARTTIME + self.sim.simt - pos['ts'] < self.INTERVALTIME + delay + 10:
                         cmdstr = 'MOVE %s, %f, %f, %d' % \
                             (acid, pos['loc']['lat'], pos['loc']['lng'], pos['alt'])
-                        self.stack.stack(cmdstr)
+                        stack.stack(cmdstr)
 
                         cmdstr = 'HDG %s, %f' % (acid, pos['hdg'])
-                        self.stack.stack(cmdstr)
+                        stack.stack(cmdstr)
 
                         cmdstr = 'SPD %s, %f' % (acid, pos['spd'])
-                        self.stack.stack(cmdstr)
+                        stack.stack(cmdstr)
         if createcount > 0:
             print "Created " + str(createcount) + " AC"
         return

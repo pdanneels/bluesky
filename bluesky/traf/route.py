@@ -1,8 +1,8 @@
 from numpy import *
 from ..tools import geo
-from ..tools.aero import ft, kts, g0, nm, cas2tas
+from ..tools.aero import ft, kts, g0, nm, cas2tas, mach2cas
 from ..tools.misc import degto180
-
+from ..tools.position import txt2pos
 
 class Route():
     """
@@ -21,6 +21,7 @@ class Route():
     orig     = 2   # Origin airport
     dest     = 3   # Destination airport
     calcwp   = 4   # Calculated waypoint (T/C, T/D, A/C)
+    runway   = 5   # Runway: Copy name and positions
 
     def __init__(self, navdb):
         # Add pointer to self navdb object
@@ -43,48 +44,72 @@ class Route():
 
         return
 
-    def addwptStack(self, traf, idx, *args):
+    def addwptStack(self, traf, idx, *args): # args: all arguments of addwpt
         "ADDWPT acid, (wpname/lat,lon),[alt],[spd],[afterwp]"
+        
+        # Check FLYBY or FLYOVER switch, instead of adding a waypoint
         if len(args) == 1:
+
             isflyby = args[0].replace('-', '')
+
             if isflyby == "FLYBY":
                 self.swflyby = True
                 return True
+                
             elif isflyby == "FLYOVER":
                 self.swflyby = False
                 return True
+       
 
-        if type(args[0]) is str:
-            name     = args[0]
-            lat      = traf.lat[idx]
-            lon      = traf.lon[idx]
-            wptype   = self.wpnav
-            args     = args[1:]
+        # Convert to positions
+        name = args[0]
+
+        success,posobj = txt2pos(name,traf,self.navdb,traf.lat[idx],traf.lon[idx])
+        if success:        
+            
+            lat      = posobj.lat
+            lon      = posobj.lon
+            
+            if posobj.type== "nav" or posobj.type== "apt":
+                wptype = self.wpnav
+    
+            elif posobj.type == "rwy":
+                wptype  = self.runway
+    
+            else: # treat as lat/lon
+                name   = traf.id[idx]            
+                wptype   = self.wplatlon
+    
+            # Default altitude, speed and afterwp if not given
+            alt     = -999.  if len(args) < 2 else args[1]
+            spd     = -999.  if len(args) < 3 else args[2]
+            afterwp = ""     if len(args) < 4 else args[3]
+    
+            # Add waypoint
+            wpidx = self.addwpt(traf, idx, name, wptype, lat, lon, alt, spd, afterwp)
+            
+            # Check for success by checking insetred locaiton in flight plan >= 0
+            if wpidx < 0:
+                return False, "Waypoint " + name + " not added."
+    
+            # chekc for presence of orig/dest
+            norig = int(traf.fms.orig[idx] != "")
+            ndest = int(traf.fms.dest[idx] != "")
+    
+            # Check whether this is first 'real' wayppint (not orig & dest), 
+            # And if so, make active
+            if self.nwp - norig - ndest == 1:  # first waypoint: make active
+                self.direct(traf, idx, self.wpname[norig])  # 0 if no orig
+                traf.swlnav[idx] = True
+    
+            if afterwp and self.wpname.count(afterwp) == 0:
+                return True, "Waypoint " + afterwp + " not found" + \
+                    "waypoint added at end of route"
+            else:
+                return True
         else:
-            name     = traf.id[idx]
-            lat, lon = args[0:2]
-            wptype   = self.wplatlon
-            args     = args[2:]
+             return False,"Waypoint "+name+" not found."
 
-        alt = -999. if len(args) < 1 else args[0]
-        spd = -999. if len(args) < 2 else args[1]
-        afterwp = "" if len(args) < 3 else args[2]
-        wpidx = self.addwpt(traf, idx, name, wptype, lat, lon, alt, spd, afterwp)
-        if wpidx < 0:
-            return False, "Waypoint " + name + " not added."
-
-        norig = int(traf.orig[idx] != "")
-        ndest = int(traf.dest[idx] != "")
-
-        if self.nwp - norig - ndest == 1:  # first waypoint: make active
-            self.direct(traf, idx, self.wpname[norig])  # 0 if no orig
-            traf.swlnav[idx] = True
-
-        if afterwp and self.wpname.count(args[2]) == 0:
-            return True, "Waypoint " + afterwp + " not found" + \
-                "waypoint added at end of route"
-        else:
-            return True
 
     def addwpt(self,traf,iac,name,wptype,lat,lon,alt=-999.,spd=-999.,afterwp=""):
         """Adds waypoint an returns index of waypoint, lat/lon [deg], alt[m]"""
@@ -97,8 +122,14 @@ class Route():
         # Be default we trust, distrust needs to be earned
         wpok = True   # switch for waypoint check
 
-        # Select on wptype
+        # Check if name already exists, if so add integer 01, 02, 03 etc.
+        appi    = 0 # appended integer to name starts at zero (=nothing)
+        wprtename = name.upper()  # wp name for in route
+        while self.wpname.count(wprtename)>0:
+            appi = appi+1
+            wprtename = name.upper()+"%02d"%appi
 
+        # Select on wptype
         # ORIGIN: Wptype is origin?
         if wptype == self.orig:
 
@@ -116,7 +147,7 @@ class Route():
             if wpok:
                 # Overwrite existing origin
                 if self.nwp > 0 and self.wptype[0] == self.orig:
-                    self.wpname[0] = name.upper()
+                    self.wpname[0] = wprtename
                     self.wptype[0] = wptype
                     self.wplat[0]  = wplat
                     self.wplon[0]  = wplon
@@ -137,6 +168,7 @@ class Route():
                 self.nwp    = self.nwp + 1
                 if self.iactwp > 0:
                     self.iactwp = self.iactwp + 1
+                    
             idx = 0
 
         # DESTINATION: Wptype is destination?
@@ -198,74 +230,99 @@ class Route():
                 wpok  = True
 
             # Else make data complete with nav database and closest to given lat,lon
-            else:
-                newname = name.upper()
+            else: # so wptypewpnav
+                newname = wprtename
 
-                i = self.navdb.getwpidx(name.upper().strip(), lat, lon)
-                wpok = (i >= 0)
+                if wptype == self.runway:
+                    wplat = lat
+                    wplon = lon
+                    wpok  = True
 
-                if wpok:
-                    newname = name.upper()
-                    wplat = self.navdb.wplat[i]
-                    wplon = self.navdb.wplon[i]
+                else:
+                    i = self.navdb.getwpidx(name.upper().strip(), lat, lon)
+                    wpok = (i >= 0)
+    
+                    if wpok:
+                        newname = wprtename
+                        wplat = self.navdb.wplat[i]
+                        wplon = self.navdb.wplon[i]
+                    else:
+                        i = self.navdb.getapidx(name.upper().strip())
+                        wpok = (i >= 0)
+                        if wpok:
+                            newname = wprtename
+                            wplat = self.navdb.aplat[i]
+                            wplon = self.navdb.aplon[i]
+                        else:
+                            newname = wprtename
+                            wplat = lat
+                            wplon = lon
+                        
 
             # Check if afterwp is specified and found:
             aftwp = afterwp.upper().strip()  # Remove space, upper case
-            if wpok and afterwp != "" and self.wpname.count(aftwp) > 0:
-                wpidx = self.wpname.index(aftwp) + 1
-                self.wpname.insert(wpidx, newname)
-                self.wplat.insert(wpidx, wplat)
-                self.wplon.insert(wpidx, wplon)
-                self.wpalt.insert(wpidx, alt)
-                self.wpspd.insert(wpidx, spd)
-                self.wptype.insert(wpidx, wptype)
-                self.wpflyby.insert(wpidx, self.swflyby)
-                if self.iactwp >= wpidx:
-                    self.iactwp = self.iactwp + 1
-
-                idx = wpidx
-
-            # No afterwp: append, just before dest if there is a dest
-            elif wpok:
+            if wpok:  
+            
+                if afterwp != "" and self.wpname.count(aftwp) > 0:
+                    wpidx = self.wpname.index(aftwp) + 1
+                    self.wpname.insert(wpidx, newname)
+                    self.wplat.insert(wpidx, wplat)
+                    self.wplon.insert(wpidx, wplon)
+                    self.wpalt.insert(wpidx, alt)
+                    self.wpspd.insert(wpidx, spd)
+                    self.wptype.insert(wpidx, wptype)
+                    self.wpflyby.insert(wpidx, self.swflyby)
+                    if self.iactwp >= wpidx:
+                        self.iactwp = self.iactwp + 1
+    
+                    idx = wpidx
+    
+                # No afterwp: append, just before dest if there is a dest
+                else:
 
                 # Is there a destination?
-                if self.nwp > 0 and self.wptype[-1] == self.dest:
+                    if self.nwp > 0 and self.wptype[-1] == self.dest:
+    
+                        # Copy last waypoint and insert before
+                        self.wpname.append(self.wpname[-1])
+                        self.wplat.append(self.wplat[-1])
+                        self.wplon.append(self.wplon[-1])
+                        self.wpalt.append(self.wpalt[-1])
+                        self.wpspd.append(self.wpspd[-1])
+                        self.wptype.append(self.wptype[-1])
+                        self.wpflyby.append(self.wpflyby[-1])
+    
+                        self.wpname[-2] = newname
+                        self.wplat[-2]  = (wplat + 90.) % 180. - 90.
+                        self.wplon[-2]  = (wplon + 180.) % 360. - 180.
+                        self.wpalt[-2]  = alt
+                        self.wpspd[-2]  = spd
+                        self.wptype[-2] = wptype
 
-                    # Copy last waypoint and insert before
-                    self.wpname.append(self.wpname[-1])
-                    self.wplat.append(self.wplat[-1])
-                    self.wplon.append(self.wplon[-1])
-                    self.wpalt.append(self.wpalt[-1])
-                    self.wpspd.append(self.wpspd[-1])
-                    self.wptype.append(self.wptype[-1])
-                    self.wpflyby.append(self.wpflyby[-1])
+                        # Update pointers and report whether we are ok
+                        self.nwp = len(self.wplat)
+                        idx = self.nwp - 2
+                    # Or simply append
+                    else:
+                        self.wpname.append(newname)
+                        self.wplat.append((wplat + 90.) % 180. - 90.)
+                        self.wplon.append((wplon + 180.) % 360. - 180.)
+                        self.wpalt.append(alt)
+                        self.wpspd.append(spd)
+                        self.wptype.append(wptype)
+                        self.wpflyby.append(self.swflyby)
+ 
+                        # Update pointers and report whether we are ok
+                        self.nwp = len(self.wplat) 
+                        idx = self.nwp-1 
+            else:
+                idx = -1
+                if len(self.wplat) == 1:
+                    self.iactwp = 0
 
-                    self.wpname[-2] = newname
-                    self.wplat[-2]  = (wplat + 90.) % 180. - 90.
-                    self.wplon[-2]  = (wplon + 180.) % 360. - 180.
-                    self.wpalt[-2]  = alt
-                    self.wpspd[-2]  = spd
-                    self.wptype[-2] = wptype
-                    idx = self.nwp - 1
-
-                # Or simply append
-                else:
-                    self.wpname.append(newname)
-                    self.wplat.append((wplat + 90.) % 180. - 90.)
-                    self.wplon.append((wplon + 180.) % 360. - 180.)
-                    self.wpalt.append(alt)
-                    self.wpspd.append(spd)
-                    self.wptype.append(wptype)
-                    self.wpflyby.append(self.swflyby)
-                    idx = self.nwp - 1
-
-        # Update pointers and report whether we are ok
-
-        if not wpok:
-            idx = -1
-            if len(self.wplat) == 1:
-                self.iactwp = 0
-
+            #update qdr in traffic
+            traf.actwp.next_qdr[iac] = self.getnextqdr()        
+            
         # Update waypoints
         if not (wptype == self.calcwp):
             self.calcfp()
@@ -273,6 +330,7 @@ class Route():
         # Update autopilot settings
         if wpok and self.iactwp >= 0 and self.iactwp < self.nwp:
             self.direct(traf, iac, self.wpname[self.iactwp])
+
 
         return idx
 
@@ -282,21 +340,21 @@ class Route():
         if name != "" and self.wpname.count(name) > 0:
             wpidx = self.wpname.index(name)
             self.iactwp = wpidx
-            traf.actwplat[i] = self.wplat[wpidx]
-            traf.actwplon[i] = self.wplon[wpidx]
+            traf.actwp.lat[i] = self.wplat[wpidx]
+            traf.actwp.lon[i] = self.wplon[wpidx]
 
             if traf.swvnav[i]:
                 # Set target altitude for autopilot
                 if self.wpalt[wpidx] > 0:
 
                     if traf.alt[i] < self.wptoalt[i]-10.*ft:
-                        traf.actwpalt[i] = self.wptoalt[wpidx]
-                        traf.dist2vs[i] = 9999.
+                        traf.actwp.alt[i] = self.wptoalt[wpidx]
+                        traf.fms.dist2vs[i] = 9999.
                     else:
                         steepness = 3000.*ft/(10.*nm)
-                        traf.actwpalt[i] = self.wptoalt[wpidx] + self.wpxtoalt[wpidx]*steepness
-                        delalt = traf.alt[i] - traf.actwpalt[i]
-                        traf.dist2vs[i] = steepness*delalt
+                        traf.actwp.alt[i] = self.wptoalt[wpidx] + self.wpxtoalt[wpidx]*steepness
+                        delalt = traf.alt[i] - traf.actwp.alt[i]
+                        traf.fms.dist2vs[i] = steepness*delalt
 
                 # Set target speed for autopilot
                 spd = self.wpspd[wpidx]
@@ -304,14 +362,14 @@ class Route():
                     if spd < 2.0:
                         traf.aspd[i] = mach2cas(spd, traf.alt[i])
                     else:
-                        traf.aspd[i] = cas2tas(spd, traf.alt[i])
+                        traf.aspd[i] = cas2tas(spd, traf.alt[i]) # or is '= spd'
 
             qdr, dist = geo.qdrdist(traf.lat[i], traf.lon[i],
-                                traf.actwplat[i], traf.actwplon[i])
+                                traf.actwp.lat[i], traf.actwp.lon[i])
 
             turnrad = traf.tas[i]*traf.tas[i]/tan(radians(25.)) / g0 / nm  # default bank angle 25 deg
 
-            traf.actwpturn[i] = turnrad*abs(tan(0.5*radians(max(5., abs(degto180(qdr -
+            traf.actwp.turndist[i] = turnrad*abs(tan(0.5*radians(max(5., abs(degto180(qdr -
                         self.wpdirfrom[self.iactwp]))))))
 
             traf.swlnav[i] = True
@@ -319,7 +377,7 @@ class Route():
         else:
             return False, "Waypoint " + wpnam + " not found"
 
-    def listrte(self, scr, ipage=0):
+    def listrte(self, scr, idx, traf, ipage=0):
         """LISTRTE command: output route to screen"""
         if self.nwp <= 0:
             return False, "Aircraft has no route."
@@ -335,9 +393,11 @@ class Route():
                 # Altitude
                 if self.wpalt[i] < 0:
                     txt = txt+"----- / "
+                    
                 elif self.wpalt[i] > 4500 * ft:
                     FL = int(round((self.wpalt[i]/(100.*ft))))
                     txt = txt+"FL"+str(FL)+" / "
+                    
                 else:
                     txt = txt+str(int(round(self.wpalt[i] / ft))) + " / "
 
@@ -359,20 +419,23 @@ class Route():
         # Add command for next page to screen command line
         npages = int((self.nwp + 6) / 7)
         if ipage + 1 < npages:
-            scr.cmdline("LISTRTE "+acid+","+str(ipage+1))
+            scr.cmdline("LISTRTE "+traf.id[idx]+","+str(ipage+1))
 
     def getnextwp(self):
         """Go to next waypoint and return data"""
-        if self.iactwp+1<self.nwp:
+        lnavon = self.iactwp +1 < self.nwp
+        if lnavon:
             self.iactwp = self.iactwp + 1
             lnavon = True
         else:
             lnavon = False
+            
+        nextqdr= self.getnextqdr()                                                          
 
         return self.wplat[self.iactwp],self.wplon[self.iactwp],   \
                self.wpalt[self.iactwp],self.wpspd[self.iactwp],   \
                self.wpxtoalt[self.iactwp],self.wptoalt[self.iactwp],\
-               lnavon,self.wpflyby[self.iactwp]
+               lnavon,self.wpflyby[self.iactwp], nextqdr
 
     def delwpt(self, delwpname):
         """Delete waypoint"""
@@ -605,7 +668,9 @@ class Route():
         return        
 
     def findact(self,traf,i):
-        """ Find best default active waypoint"""
+        """ Find best default active waypoint. 
+        This function is called during route creation"""
+#        print "findact is called.!"
 
         # Check for easy answers first
         if self.nwp<=0:
@@ -615,20 +680,26 @@ class Route():
             return 0
 
         # Find closest    
-        wplat  = array(traf.actwplat)
-        wplon  = array(traf.actwplon)
+        wplat  = array(self.wplat)
+        wplon  = array(self.wplon)
         dy = wplat - traf.lat[i] 
         dx = (wplon - traf.lon[i]) * traf.coslat[i]
         dist2 = dx*dx + dy*dy            
         iwpnear = argmin(dist2)
-        
+
         #Unless behind us, next waypoint?
         if iwpnear+1<self.nwp:
             qdr = arctan2(dx[iwpnear],dy[iwpnear])
-            delhdg = abs(degto180(traf.trk[i]-qdr))
-            if delhdg>90.:
-                iwpnear= iwpnear+1
-        
+            delhdg = abs(degto180(traf.trk[i]-qdr))            
+            
+            # we only turn to the first waypoint if we can reach the required
+            # heading before reaching the waypoint
+            time_turn = max(0.01,traf.tas[i])*radians(delhdg)/(g0*tan(traf.bank[i]))
+            time_straight= dist2[iwpnear]*nm/max(0.01,traf.tas[i])
+            
+            if time_turn >time_straight:
+                iwpnear = iwpnear+1         
+
         return iwpnear
 
     def dumpRoute(self, traf, idx):
@@ -650,3 +721,14 @@ class Route():
             # End of data
             f.write("----\n")
             f.close()
+            
+    def getnextqdr(self):
+        # get qdr for next leg
+        if self.iactwp+1<self.nwp:
+            nextqdr, dist = geo.qdrdist(\
+                        self.wplat[self.iactwp],  self.wplon[self.iactwp],\
+                        self.wplat[self.iactwp+1],self.wplon[self.iactwp+1]) 
+        else:
+            nextqdr = -999. 
+        return nextqdr
+

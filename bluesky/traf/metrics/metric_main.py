@@ -4,12 +4,13 @@ Created by  : P. Danneels, 2016
 
 """
 
-# To ignore numpy errors:
+# To ignore numpy errors in pylint static code analyser:
 #     pylint: disable=E1101
 
 import os
 import numpy as np
 from time import strftime, gmtime
+from ... import stack
 from .metrics import MetricRelativeVelocity, MetricConflictRate, \
     MetricTrafficDensity, MetricConflictsPerAc, MetricRangeDot, \
     MetricSeverityTime, MetricRelativeHeading, MetricOther, \
@@ -53,8 +54,8 @@ class Geometric():
         # speed vectors in Earth-Fixed reference frame
         # meaning x points towards North, Z towards center of the Earth, right hand system
         # vectV[AC,1,[Vx,Vy,Vz]]
-        vectV[:, :, 0] = (traf.gs*np.sin(traf.ahdg*np.pi/180)).reshape((size, 1))
-        vectV[:, :, 1] = (traf.gs*np.cos(traf.ahdg*np.pi/180)).reshape((size, 1))
+        vectV[:, :, 0] = (traf.gs*np.sin(traf.hdg*np.pi/180)).reshape((size, 1))
+        vectV[:, :, 1] = (traf.gs*np.cos(traf.hdg*np.pi/180)).reshape((size, 1))
         vectV[:, :, 2] = -traf.vs.reshape((size, 1))
 
         # relative speed vectors vectdV[AC1, AC2, [Vx,Vy,Vz]]
@@ -129,6 +130,7 @@ class Metrics():
 
     def __init__(self, sim):
         self.sim = sim
+        self.add_stack_commands(sim)
 
         # Toggle calculations and output
         self.swsingleshot = True    # Toggle single shot operation
@@ -145,6 +147,14 @@ class Metrics():
         self.intervalplot = 15      # [seconds]
 
         self.init_instances(sim)
+    
+    def add_stack_commands(self, sim):
+        cmddict = {"METRICS": [
+                    "METRICS ON/OFF",
+                    "onoff",
+                    lambda *args: sim.metrics.toggle(*args)]
+                    }
+        stack.append_commands(cmddict)
 
     def init_instances(self, sim):
         """ Initiate instances for metrics and plot/log/stats modules"""
@@ -193,7 +203,7 @@ class Metrics():
         if rarea is not None:  # Update tracking DB for research area
             if sim.rarea.surfacearea <= 0:
                 print "Defining default research area"
-                sim.stack.stack("RAREA %f,%f,%f,%f" % (51.6, 4, 53, 6))
+                stack.stack("RAREA %f,%f,%f,%f" % (51.6, 4, 53, 6))
             rarea.update()
 
         sim.pause() # "Lost time is never found again" - Benjamin Franklin -
