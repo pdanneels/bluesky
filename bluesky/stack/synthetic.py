@@ -37,7 +37,7 @@ class Synthetic():
             scr.swgeo = False         # don't draw coastlines and borders
             scr.swsat = False         # don't draw the satellite image
             scr.apsw = 0              # don't draw airports
-            scr.swlabel = 0           # don't draw aircraft labels
+            #scr.swlabel = 0          # don't draw aircraft labels
             scr.wpsw = 0              # don't draw waypoints
             scr.swfir = False         # don't show FIRs
             scr.swgrid = True         # do show a grid
@@ -52,8 +52,7 @@ class Synthetic():
             # cmd.scenlines.append("00:00:00.00>"+callsign+"TESTCIRCLE")
             # cmd.scenlines.append("00:00:00.00>DT 1")
             # cmd.scenlines.append("00:00:00.00>FIXDT ON")
-            #sim.mode = sim.init
-            stack.stack("RESET")
+            sim.reset()
 
         elif command == "HELP":
             return True, ("This is the synthetic traffic scenario module\n" \
@@ -63,7 +62,7 @@ class Synthetic():
         #create a perpendicular conflict between two aircraft
         elif command == "SIMPLE":
             scr.isoalt = 0
-            stack.stack("RESET")
+            sim.reset()
             traf.create("OWNSHIP", "GENERIC", -.5, 0, 0, 5000 * ft, 200)
             traf.create("INTRUDER", "GENERIC", 0, .5, 270, 5000 * ft, 200)
             return True
@@ -71,7 +70,7 @@ class Synthetic():
         #create a perpendicular conflict with slight deviations to aircraft speeds and places
         elif command == "SIMPLED":
             scr.isoalt = 0
-            stack.stack("RESET")
+            sim.reset()
             ds = random.uniform(0.92, 1.08)
             dd = random.uniform(0.92, 1.08)
             traf.create("OWNSHIP", "GENERIC", -.5 * dd, 0, 0, 20000 * ft, 200 * ds)
@@ -84,7 +83,7 @@ class Synthetic():
                 return False, "5 ARGUMENTS REQUIRED"
             else:
                 scr.isoalt = 0
-                stack.stack("RESET")
+                sim.reset()
                 x = traf.dbconf.xw[int(float(cmdargs[1]))]/111319.
                 y = traf.dbconf.yw[int(float(cmdargs[2]))]/111319.
                 v_o = traf.dbconf.v_o[int(float(cmdargs[3]))]
@@ -100,7 +99,6 @@ class Synthetic():
                 return True, callsign + "SUPER <NUMBER OF A/C>"
             else:
                 scr.isoalt = 0
-                stack.stack("RESET")
                 numac = int(float(cmdargs[1]))
                 distance = 0.50 #this is in degrees lat/lon, for now
                 alt = 20000*ft #ft
@@ -108,9 +106,8 @@ class Synthetic():
                 for i in range(numac):
                     angle = 2*np.pi/numac*i
                     acid = "SUP" + str(i)
-                    traf.create(acid, "SUPER", distance * -np.cos(angle), distance * np.sin(angle), 360.0 - 360.0 / numac * i, alt, spd)                    
-                    #stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
-                    #    (acid, "SUPER", distance*-np.cos(angle), distance*np.sin(angle), 360-360/numac*i, alt, spd))
+                    stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                        (acid, 'SUPER', distance*-np.cos(angle), distance*np.sin(angle), 360-360/numac*i, alt, spd))
 
                 if SAVESCENARIOS:
                     fname = "super"+str(numac)
@@ -123,7 +120,7 @@ class Synthetic():
                 return True, callsign+"SPHERE <NUMBER OF A/C PER LAYER>"
             else:
                 scr.isoalt = 1. / 200
-                stack.stack("RESET")
+                sim.reset()
                 numac = int(float(cmdargs[1]))
                 distance = 0.5 #this is in degrees lat/lon, for now
                 distancenm = distance * 111319. / nm
@@ -218,7 +215,7 @@ class Synthetic():
             else:
                 size = int(float(cmdargs[1]))
                 scr.isoalt = 0
-                stack.stack("RESET")
+                sim.reset()
                 mperdeg = 111319.
                 hsep = traf.asas.R # [m] horizontal separation minimum
                 hseplat = hsep/mperdeg
@@ -249,7 +246,7 @@ class Synthetic():
         # create a conflict with several aircraft flying in a floor formation
         elif command == "FLOOR":
             scr.isoalt = 1./50
-            stack.stack("RESET")
+            sim.reset()
             mperdeg = 111319.
             altdif = 3000 # ft
             hsep = traf.asas.R # [m] horizontal separation minimum
@@ -274,7 +271,7 @@ class Synthetic():
             else:
                 numac = int(float(cmdargs[1]))
                 scr.isoalt = 0
-                stack.stack("RESET")
+                sim.reset()
                 mperdeg = 111319.
                 vsteps = 50 #[m/s]
                 for v in range(vsteps, vsteps*(numac+1), vsteps): #m/s
@@ -290,7 +287,7 @@ class Synthetic():
         # create a conflict with several aircraft flying in a wall formation
         elif command == "WALL":
             scr.isoalt = 0
-            stack.stack("RESET")
+            sim.reset()
             mperdeg = 111319.
             distance = 0.6 # in degrees lat/lon, for now
             hsep = traf.asas.R # [m] horizontal separation minimum
@@ -313,7 +310,7 @@ class Synthetic():
                 return True, commandhelp
             else:
                 try:
-                    stack.stack("RESET") # start fresh
+                    sim.reset() # start fresh
                     synerror, acalt, acspd, actype, startdistance, ang = self.__arguments__(numargs, cmdargs[1:])
                     if synerror:
                         raise Exception()
@@ -354,7 +351,7 @@ class Synthetic():
                 return True, commandhelp
             else:
                 try:
-                    stack.stack("RESET") # start fresh
+                    sim.reset() # start fresh
                     synerror, acalt, acspd, actype, startdistance, ang = self.__arguments__(numargs, cmdargs[1:])
                     if synerror:
                         raise Exception()

@@ -11,9 +11,10 @@ from screenio import ScreenIO
 from simevents import StackTextEventType, BatchEventType, BatchEvent, SimStateEvent, SimQuitEventType
 from ...traf import Traffic
 from ...navdb import Navdatabase
-from ... import stack
-#from ...traf import Metric
 from ... import settings
+from ... import stack
+from ...stack.synthetic import Synthetic
+#from ...traf import Metric
 #from ...tools.datafeed import Modesbeast
 from ...tools import datalog, areafilter
 from ...traf.metric2 import Metrics
@@ -64,6 +65,7 @@ class Simulation(QObject):
         self.traf        = Traffic(self.navdb)
 
         # Additional modules
+        self.syn = Synthetic(self, self.screenio)
         self.beastfeed = None # Modesbeast(self.traf)
         self.rarea = Rarea(self, self.screenio)
         self.metric = None # Metrics() OLD MODULE

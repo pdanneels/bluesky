@@ -26,9 +26,6 @@ from ..tools.misc import txt2alt, cmdsplit
 from ..tools.position import txt2pos, islat
 from .. import settings
 
-# Temporary fix for synthetic
-#import synthetic as syn
-
 # Global variables
 cmddict   = dict()
 cmdsynon  = dict()

@@ -191,9 +191,8 @@ class Simulation:
 
     def reset(self):
         self.simt = 0.0
-        #self.mode = self.init
+        self.mode = self.init
         self.traf.reset(self.navdb)
-        print "NOW IN SIM RESET, 1"
         datalog.reset()
         areafilter.reset()
 
