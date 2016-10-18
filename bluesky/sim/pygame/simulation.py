@@ -2,6 +2,7 @@ import time
 from ...traf import Traffic
 from ... import settings
 from ... import stack
+from ...stack.synthetic import Synthetic
 from ...tools import datalog, areafilter
 #from ...traf.metric import Metric
 from ...traf.metrics.metric_main import Metrics
@@ -54,6 +55,7 @@ class Simulation:
         self.stack = stack.init(self, self.traf, gui.scr)
         
         # Additional modules
+        self.syn = Synthetic(self, gui.scr)
         self.beastfeed = None # Modesbeast(self.stack, self.traf)
         self.telnet_in = None # StackTelnetServer(self.stack)
         self.rarea = Rarea(self, gui.scr)
@@ -189,8 +191,9 @@ class Simulation:
 
     def reset(self):
         self.simt = 0.0
-        self.mode = self.init
+        #self.mode = self.init
         self.traf.reset(self.navdb)
+        print "NOW IN SIM RESET, 1"
         datalog.reset()
         areafilter.reset()
 

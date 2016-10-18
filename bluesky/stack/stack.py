@@ -27,7 +27,7 @@ from ..tools.position import txt2pos, islat
 from .. import settings
 
 # Temporary fix for synthetic
-import synthetic as syn
+#import synthetic as syn
 
 # Global variables
 cmddict   = dict()
@@ -279,7 +279,7 @@ def init(sim, traf, scr):
         ],
         "PAN": [
             "PAN latlon/acid/airport/waypoint/LEFT/RIGHT/ABOVE/DOWN",
-            "float/latlon/txt[,float]",
+            "float/latlon/txt,[float]",
             scr.pan
         ],
         "PCALL": [
@@ -396,12 +396,6 @@ def init(sim, traf, scr):
             "SYMBOL",
             "",
             scr.symbol
-        ],
-        "SYN": [
-            " SYN: Possible subcommands: HELP, SIMPLE, SIMPLED, DIFG, SUPER,\n" + \
-            "MATRIX, FLOOR, TAKEOVER, WALL, ROW, COLUMN, DISP",
-            "txt,[...]",
-            lambda *args: syn.process(args[0], len(args) - 1, args, sim, traf, scr)
         ],
         "TAXI": [
             "TAXI ON/OFF : OFF auto deletes traffic below 1500 ft",
