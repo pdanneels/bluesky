@@ -3,9 +3,14 @@ settings.cfg
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+*.pyc
 
 # Sublime text project files
 *.sublime*
+
+# Spyder files
+.spyderproject
+.spyderworkspace
 
 # C extensions
 *.so

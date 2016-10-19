@@ -13,7 +13,7 @@ from ..tools.misc import txt2alt, txt2spd
 SAVESCENARIOS = False #whether to save a scenario as .scn file after generation via commands
 
 class Synthetic():
-    """ Class to generate synthetic scenarios """
+    """ Class contains functions to generate synthetic scenarios """
     def __init__(self, sim, scr):
         self.sim = sim
         self.traf = sim.traf
@@ -28,7 +28,7 @@ class Synthetic():
 
     def process(self, command, numargs, cmdargs, sim):
         """ Process the synthetic commands """
-        callsign = 'SYN_'
+        callsign = 'SYN '
         traf = sim.traf
         scr = self.scr
 
@@ -37,7 +37,7 @@ class Synthetic():
             scr.swgeo = False         # don't draw coastlines and borders
             scr.swsat = False         # don't draw the satellite image
             scr.apsw = 0              # don't draw airports
-            #scr.swlabel = 0          # don't draw aircraft labels
+            #scr.swlabel = 0          # don't draw aircraft labels      # BROKEN
             scr.wpsw = 0              # don't draw waypoints
             scr.swfir = False         # don't show FIRs
             scr.swgrid = True         # do show a grid
@@ -62,19 +62,21 @@ class Synthetic():
         #create a perpendicular conflict between two aircraft
         elif command == "SIMPLE":
             scr.isoalt = 0
-            sim.reset()
-            traf.create("OWNSHIP", "GENERIC", -.5, 0, 0, 5000 * ft, 200)
-            traf.create("INTRUDER", "GENERIC", 0, .5, 270, 5000 * ft, 200)
+            stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                ("OWNSHIP", "GENERIC", -.5, 0, 0, 5000 * ft, 200))
+            stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                ("INTRUDER", "GENERIC", 0, .5, 270, 5000 * ft, 200))
             return True
 
         #create a perpendicular conflict with slight deviations to aircraft speeds and places
         elif command == "SIMPLED":
             scr.isoalt = 0
-            sim.reset()
             ds = random.uniform(0.92, 1.08)
             dd = random.uniform(0.92, 1.08)
-            traf.create("OWNSHIP", "GENERIC", -.5 * dd, 0, 0, 20000 * ft, 200 * ds)
-            traf.create("INTRUDER", "GENERIC", 0, .5 / dd, 270, 20000 * ft, 200 / ds)
+            stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                ("OWNSHIP", "GENERIC", -.5 * dd, 0, 0, 20000 * ft, 200 * ds))
+            stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                ("INTRUDER", "GENERIC", 0, .5 / dd, 270, 20000 * ft, 200 / ds))
             return True
 
         # used for testing the differential game resolution method
@@ -83,14 +85,16 @@ class Synthetic():
                 return False, "5 ARGUMENTS REQUIRED"
             else:
                 scr.isoalt = 0
-                sim.reset()
+
                 x = traf.dbconf.xw[int(float(cmdargs[1]))]/111319.
                 y = traf.dbconf.yw[int(float(cmdargs[2]))]/111319.
                 v_o = traf.dbconf.v_o[int(float(cmdargs[3]))]
                 v_w = traf.dbconf.v_w[int(float(cmdargs[4]))]
                 phi = np.degrees(traf.dbconf.phi[int(float(cmdargs[5]))])
-                traf.create("OWN", "GENERIC", 0, 0, 0, 5000*ft, v_o)
-                traf.create("WRN", "GENERIC", y, x, phi, 5000*ft, v_w)
+                stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                    ("OWN", "GENERIC", 0, 0, 0, 5000*ft, v_o))
+                stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                    ("WRN", "GENERIC", y, x, phi, 5000*ft, v_w))
                 return True
 
         # create a superconflict of x aircraft in a circle towards the center
@@ -107,7 +111,8 @@ class Synthetic():
                     angle = 2*np.pi/numac*i
                     acid = "SUP" + str(i)
                     stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
-                        (acid, 'SUPER', distance*-np.cos(angle), distance*np.sin(angle), 360-360/numac*i, alt, spd))
+                        (acid, 'SUPER', distance*-np.cos(angle), distance*np.sin(angle), \
+                        360-360/numac*i, alt, spd))
 
                 if SAVESCENARIOS:
                     fname = "super"+str(numac)
@@ -117,10 +122,10 @@ class Synthetic():
         # create a sphereconflict of 3 layers of superconflicts
         elif command == "SPHERE":
             if numargs == 0:
-                return True, callsign+"SPHERE <NUMBER OF A/C PER LAYER>"
+                return True, callsign + "SPHERE <NUMBER OF A/C PER LAYER>"
             else:
                 scr.isoalt = 1. / 200
-                sim.reset()
+
                 numac = int(float(cmdargs[1]))
                 distance = 0.5 #this is in degrees lat/lon, for now
                 distancenm = distance * 111319. / nm
@@ -145,11 +150,14 @@ class Synthetic():
                     track = np.degrees(-angle)
 
                     acidl = "SPH" + str(i) + "LOW"
-                    traf.create(acidl, "SUPER", lat, lon, track, lowalt*ft, lospd)
+                    stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                        (acidl, "SUPER", lat, lon, track, lowalt*ft, lospd))
                     acidm = "SPH" + str(i) + "MID"
-                    traf.create(acidm, "SUPER", lat, lon, track, midalt*ft, mispd)
+                    stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                        (acidm, "SUPER", lat, lon, track, midalt*ft, mispd))
                     acidh = "SPH" + str(i) + "HIG"
-                    traf.create(acidh, "SUPER", lat, lon, track, highalt*ft, hispd)
+                    stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                        (acidh, "SUPER", lat, lon, track, highalt*ft, hispd))
 
                     idxl = traf.id.index(acidl)
                     idxh = traf.id.index(acidh)
@@ -170,7 +178,7 @@ class Synthetic():
 
         elif command == "FUNNEL":
             if numargs == 0:
-                scr.echo(callsign+"FUNNEL <FUNNELSIZE IN NUMBER OF A/C>")
+                scr.echo(callsign + "FUNNEL <FUNNELSIZE IN NUMBER OF A/C>")
             else:
                 scr.isoalt = 0
                 traf.deleteall()
@@ -185,8 +193,9 @@ class Synthetic():
                 for i in range(numac):
                     angle = np.pi/2/numac*i+np.pi/4
                     acid = "SUP"+str(i)
-                    traf.create(acid, "SUPER", \
-                        distance*-np.cos(angle), distance*-np.sin(angle), 90, alt, spd)
+                    stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                        (acid, "SUPER", distance*-np.cos(angle), distance*-np.sin(angle), \
+                        90, alt, spd))
 
                 separation = traf.asas.R*1.01
                 #[m] the factor 1.01 is so that the funnel doesn't collide with itself
@@ -195,14 +204,16 @@ class Synthetic():
                 for row in range(1):
                     for col in range(15):
                         opening = (size+1)/2.*separation/mperdeg
-                        Coldeg = sepdeg*col  #[deg]
-                        Rowdeg = sepdeg*row  #[deg]
+                        coldeg = sepdeg*col  #[deg]
+                        rowdeg = sepdeg*row  #[deg]
                         acid1 = "FUNN"+str(row)+"-"+str(col)
                         acid2 = "FUNL"+str(row)+"-"+str(col)
-                        traf.create(acid1, "FUNNEL", \
-                            Coldeg+Rowdeg+opening, -Coldeg+Rowdeg+0.5, 0, alt, 0)
-                        traf.create(acid2, "FUNNEL", \
-                            -Coldeg-Rowdeg-opening, -Coldeg+Rowdeg+0.5, 0, alt, 0)
+                        stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                            (acid1, "FUNNEL", coldeg+rowdeg+opening, -coldeg+rowdeg+0.5, \
+                            0, alt, 0))
+                        stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                            (acid2, "FUNNEL", -coldeg-rowdeg-opening, -coldeg+rowdeg+0.5, \
+                            0, alt, 0))
 
                 if SAVESCENARIOS:
                     fname = "funnel"+str(size)
@@ -211,11 +222,11 @@ class Synthetic():
         # create a conflict with several aircraft flying in a matrix formation
         elif command == "MATRIX":
             if numargs == 0:
-                return True, callsign+"MATRIX <SIZE>"
+                return True, callsign + "MATRIX <SIZE>"
             else:
                 size = int(float(cmdargs[1]))
                 scr.isoalt = 0
-                sim.reset()
+
                 mperdeg = 111319.
                 hsep = traf.asas.R # [m] horizontal separation minimum
                 hseplat = hsep/mperdeg
@@ -226,17 +237,21 @@ class Synthetic():
 
                 for i in range(size):
                     acidn = "NORTH"+str(i)
-                    traf.create(acidn, "MATRIX", \
-                        hseplat*(size-1.)/2+extradist, (i-(size-1.)/2)*hseplat, 180, 20000*ft, vel)
+                    stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                        (acidn, "MATRIX", hseplat*(size-1.)/2+extradist, (i-(size-1.)/2)*hseplat, \
+                        180, 20000*ft, vel))
                     acids = "SOUTH"+str(i)
-                    traf.create(acids, "MATRIX", \
-                        -hseplat*(size-1.)/2-extradist, (i-(size-1.)/2)*hseplat, 0, 20000*ft, vel)
+                    stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                        (acids, "MATRIX", -hseplat*(size-1.)/2-extradist, (i-(size-1.)/2)*hseplat, \
+                        0, 20000*ft, vel))
                     acide = "EAST"+str(i)
-                    traf.create(acide, "MATRIX", \
-                        (i-(size-1.)/2)*hseplat, hseplat*(size-1.)/2+extradist, 270, 20000*ft, vel)
+                    stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                        (acide, "MATRIX", (i-(size-1.)/2)*hseplat, hseplat*(size-1.)/2+extradist, \
+                        270, 20000*ft, vel))
                     acidw = "WEST"+str(i)
-                    traf.create(acidw, "MATRIX", \
-                        (i-(size-1.)/2)*hseplat, -hseplat*(size-1.)/2-extradist, 90, 20000*ft, vel)
+                    stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                        (acidw, "MATRIX", (i-(size-1.)/2)*hseplat, -hseplat*(size-1.)/2-extradist, \
+                        90, 20000*ft, vel))
 
                 if SAVESCENARIOS:
                     fname = "matrix"+str(size)
@@ -246,57 +261,62 @@ class Synthetic():
         # create a conflict with several aircraft flying in a floor formation
         elif command == "FLOOR":
             scr.isoalt = 1./50
-            sim.reset()
+
             mperdeg = 111319.
             altdif = 3000 # ft
             hsep = traf.asas.R # [m] horizontal separation minimum
             floorsep = 1.1 #factor of extra spacing in the floor
             hseplat = hsep/mperdeg*floorsep
-            traf.create("OWNSHIP", "FLOOR", -1, 0, 90, (20000+altdif)*ft, 200)
+            stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                ("OWNSHIP", "FLOOR", -1, 0, 90, (20000+altdif)*ft, 200))
             idx = traf.id.index("OWNSHIP")
             traf.avs[idx] = -10
             traf.aalt[idx] = 20000-altdif
             for i in range(20):
                 acid = "OTH"+str(i)
-                traf.create(acid, "FLOOR", -1, (i-10)*hseplat, 90, 20000*ft, 200)
+                stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                    (acid, "FLOOR", -1, (i-10)*hseplat, 90, 20000*ft, 200))
             if SAVESCENARIOS:
                 fname = "floor"
                 stack.stack("SAVEIC %s" % fname)
             return True
 
         # create a conflict with several aircraft overtaking eachother
-        elif command == "TAKEOVER":
+        elif command == "OVERTAKE":
             if numargs == 0:
-                return True, callsign+"TAKEOVER <NUMBER OF A/C>"
+                return True, callsign + "OVERTAKE <NUMBER OF A/C>"
             else:
                 numac = int(float(cmdargs[1]))
                 scr.isoalt = 0
-                sim.reset()
+
                 mperdeg = 111319.
                 vsteps = 50 #[m/s]
                 for v in range(vsteps, vsteps*(numac+1), vsteps): #m/s
                     acid = "OT"+str(v)
                     distancetofly = v*5*60 #m
                     degtofly = distancetofly/mperdeg
-                    traf.create(acid, "OT", 0, -degtofly, 90, 20000*ft, v)
+                    stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                        (acid, "OT", 0, -degtofly, 90, 20000*ft, v))
                 if SAVESCENARIOS:
-                    fname = "takeover"+str(numac)
+                    fname = "overtake"+str(numac)
                     stack.stack("SAVEIC %s" % fname)
                 return True
 
         # create a conflict with several aircraft flying in a wall formation
         elif command == "WALL":
             scr.isoalt = 0
-            sim.reset()
+
             mperdeg = 111319.
             distance = 0.6 # in degrees lat/lon, for now
             hsep = traf.asas.R # [m] horizontal separation minimum
             hseplat = hsep/mperdeg
             wallsep = 1.1 #factor of extra space in the wall
-            traf.create("OWNSHIP", "WALL", 0, -distance, 90, 20000*ft, 200)
+            stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                ("OWNSHIP", "WALL", 0, -distance, 90, 20000*ft, 200))
             for i in range(20):
                 acid = "OTHER"+str(i)
-                traf.create(acid, "WALL", (i-10)*hseplat*wallsep, distance, 270, 20000*ft, 200)
+                stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                    (acid, "WALL", (i-10)*hseplat*wallsep, distance, 270, 20000*ft, 200))
             if SAVESCENARIOS:
                 fname = "wall"
                 stack.stack("SAVEIC %s" % fname)
@@ -304,13 +324,13 @@ class Synthetic():
 
         # create a conflict with several aircraft flying in two rows angled towards each other
         elif command == "ROW":
-            commandhelp = "SYN_ROW n angle " \
+            commandhelp = "SYN ROW n angle " \
                 "[-r=radius in NM] [-a=alt in ft] [-s=speed EAS in kts] [-t=actype]"
             if numargs == 0:
                 return True, commandhelp
             else:
                 try:
-                    sim.reset() # start fresh
+                     # start fresh
                     synerror, acalt, acspd, actype, startdistance, ang = self.__arguments__(numargs, cmdargs[1:])
                     if synerror:
                         raise Exception()
@@ -345,13 +365,13 @@ class Synthetic():
 
         # create a conflict with several aircraft flying in two columns angled towards each other
         elif command == "COLUMN":
-            commandhelp = "SYN_COLUMN n angle " \
+            commandhelp = "SYN COLUMN n angle " \
                 "[-r=radius in NM] [-a=alt in ft] [-s=speed EAS in kts] [-t=actype]"
             if numargs == 0:
                 return True, commandhelp
             else:
                 try:
-                    sim.reset() # start fresh
+                     # start fresh
                     synerror, acalt, acspd, actype, startdistance, ang = self.__arguments__(numargs, cmdargs[1:])
                     if synerror:
                         raise Exception()
