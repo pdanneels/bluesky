@@ -14,8 +14,8 @@ class Metrics(object):
     """ Main class for metrics """
     def __init__(self, sim, geodata, swprint, metrictype):
         self.sim = sim
-        self.traf = self.sim.traf
-        self.asas = self.sim.traf.asas
+        self.traf = sim.traf
+        self.asas = sim.traf.asas
         # Instance of this class containing the geodata
         self.geodata = geodata
         self.swprint = swprint
@@ -29,7 +29,7 @@ class Metrics(object):
     def gethist(self):
         """ returns history arrays """
         return np.array((self.timehist, self.hist))
-    
+
     def updategeodata(self):
         """ returns the set of geometric data """
         self.size = self.traf.gs.size
@@ -71,11 +71,6 @@ class Metrics(object):
         vectdV[:, :, 1] = np.subtract.outer(vectV[:, 0, 1], vectV[:, 0, 1])
         vectdV[:, :, 2] = np.subtract.outer(vectV[:, 0, 2], vectV[:, 0, 2])
 
-        #vx = vectV[:, :, 0]
-        #vy = vectV[:, :, 1]
-        #vz = vectV[:, :, 2]
-        # rdot = ((x[j]-x[i])*(vx[j]-vx[i])+(y[j]-y[i])*(vy[j]-vy[i]))/dr
-
         # relative speed squared
         dVsqr = np.sum(np.square(vectdV), axis=2)
 
@@ -97,25 +92,44 @@ class Metrics(object):
         # relative speed matrix, deltaheading
         return vectV, qdrdist, dVsqr, dhdg
 
-class DynamicDensity(Metrics):
-    """ METRICS: DYNAMIC DENSITY METRIC """
+class AirspaceQuality(Metrics):
+    """ METRIC: AirspaceQuality """
     def __init__(self, sim, geodata, swprint):
         Metrics.__init__(self, sim, geodata, swprint, self.__class__.__name__)
+        self.pairsafetylevels = []
 
-    def update(self, rdot):
+    @staticmethod
+    def dcpa2todcpa(dcpa2):
+        """ Convert DCPA2 to DCPA in meters, do not allow zero values"""
+        dcpa = np.sqrt(dcpa2)
+        return dcpa # in m
+        #return np.sqrt(dcpa2)/1852. # in NM
+
+    @staticmethod
+    def purgezeros(array, replacement):
+        """ Checks an array for zeros and replaces it with a small value """
+        array[array == 0] = replacement
+        return array
+
+    def update(self):
         """ update metric """
+        tcpa = self.asas.tcpa
+        dcpa = self.dcpa2todcpa(self.asas.dcpa2)
+        mask = np.ones(tcpa.shape, dtype=bool)
+        mask = np.triu(mask, 1)
+
+        self.purgezeros(dcpa, 0.01)
+        self.purgezeros(tcpa, 0.1)
+
+        pairsafetylevels = 1. / (dcpa[mask] * tcpa[mask])
+        averagesafetylevel = np.sum(pairsafetylevels)/pairsafetylevels.size
+
         self.timehist.append(self.sim.simt)
-        mask = np.ones(self.asas.tcpa.shape, dtype=bool)
-        np.fill_diagonal(mask, 0)
-
-        distance = self.geodata.qdrdist[:, :, 1]
-        dd1 = (distance < 100) & (self.asas.tcpa < 1800)
-        dd2 = (np.square(distance) < 10000) & (self.asas.tcpa < 1800)
-        rangeatcpa = np.sqrt(self.asas.dcpa2)/1852.
-        dd3 = (1. / self.asas.tcpa) * rdot.rdot
-        dd4 = (1. / self.asas.tcpa) * (1. / rangeatcpa)
-
-        return np.sum(dd1[mask]), np.sum(dd2[mask]), dd3, dd4
+        self.hist.append(averagesafetylevel)
+        self.pairsafetylevels.append(pairsafetylevels)
+        if self.swprint:
+            print "ASQ SL: %f" % averagesafetylevel
+        return averagesafetylevel
 
 class ConflictsPerAc(Metrics):
     """ METRIC: CONFLICTS/AC """
@@ -124,69 +138,87 @@ class ConflictsPerAc(Metrics):
 
     def update(self):
         """ update metric """
-        self.conflictsperac = float(self.asas.nconf / 2) / self.traf.ntraf
+        conflictsperac = float(self.asas.nconf / 2) / self.traf.ntraf
         self.timehist.append(self.sim.simt)
-        self.hist.append(self.conflictsperac)
+        self.hist.append(conflictsperac)
         if self.swprint:
-            print "Conflicts per AC: " + str(self.conflictsperac)
-        return self.conflictsperac
+            print "Conflicts per AC: " + str(conflictsperac)
+        return conflictsperac
 
 class ConflictRate(Metrics):
     """ METRIC: CONFLICT RATE
 
     Cr = avgVg * R * avgT / ( A * totT )
-    with:   - avgVg is average ground velocity
-            - R is speration mimimum
-            - avgT is average time in research area
-            - A is research area
-            - totT is total observation time
+    with:   - avgVg is average ground velocity [m/s]
+            - R is speration mimimum [m]
+            - avgT is average time in research area [s]
+            - A is research area [m2]
+            - totT is total observation time [s]
 
     """
     def __init__(self, sim, geodata, swprint):
         Metrics.__init__(self, sim, geodata, swprint, self.__class__.__name__)
-        self.sep = 10000
+        self.conflictrates = []     # Conflictrates times totaltime
 
     def update(self):
         """ update metric """
         rarea = self.sim.rarea
-        self.conflictrate = -1
-        if rarea.surfacearea != 0: # only perform calculations if a research area is defined
-            i = 0
-            ioac = []
-            iot = []
-            iov = []
-            for i, recordedleave in enumerate(rarea.leavetime): # loop over tracking DB
-                if recordedleave != 0:
-                    ioac.append(rarea.atimeid[i])
-                    iot.append(rarea.leavetime[i]-rarea.entertime[i])
-                    iov.append(rarea.groundspeed[i])
-            self.timehist.append(self.sim.simt)
-            if len(ioac) != 0:
-                self.conflictrate = np.average(np.array(iov)) * self.sep * \
-                    np.average(np.array(iot)) / rarea.surfacearea / \
-                    (self.sim.simt - rarea.entertime[1])
-                self.hist.append(self.conflictrate)
-                if self.swprint:
-                    print "Collision rate: " + str(self.conflictrate)
-            else:
-                self.hist.append(0)
-        return self.conflictrate
+        avgconflictrate = 0
+        sep = 10 * 1852.
+        self.timehist.append(self.sim.simt)
 
-class RelativeHeading(Metrics):
-    """ METRIC: RELATIVE HEADING """
-    def __init__(self, sim, geodata, swprint):
+        # only perform calculations if a research area is defined
+        # only perform calculations if AC already passed through RA
+        if rarea.surfacearea == 0 and len(rarea.passedthrough) != 0:
+            self.hist.append(0)
+            return 0
+
+        # only calculate for new AC
+        if len(self.conflictrates) < len(rarea.passedthrough):
+            for i in range(len(self.conflictrates), len(rarea.passedthrough)):
+                self.conflictrates.append(rarea.passedthrough[i][3] * sep * \
+                (rarea.passedthrough[i][2] - rarea.passedthrough[i][1]) / rarea.surfacearea)
+
+        avgconflictrate = np.average(self.conflictrates)
+        #avgconflictrate = np.average(np.array(groundspeeds)) * sep * \
+        #   np.average(np.array(timespendinra)) / rarea.surfacearea / \
+        #   (self.sim.simt - rarea.entrytime[0])
+
+        self.hist.append(avgconflictrate)
+        if self.swprint:
+            print "Average conflict rate: " + str(avgconflictrate)
+        return avgconflictrate
+
+class Other(Metrics):
+    """ Other, simpel to calculate metrics """
+    def __init__(self, sim, geodata, rarea, swprint):
         Metrics.__init__(self, sim, geodata, swprint, self.__class__.__name__)
+        self.rarea = rarea
+        self.histgs = []
+        self.histntraf = []
+        self.histrantraf = []
 
     def update(self):
         """ update metric """
-        mask = np.ones(self.geodata.dhdg.shape, dtype=bool)
-        mask = np.triu(mask, 1)
-        self.avgdHDG = np.average(np.abs(self.geodata.dhdg[mask]))
         self.timehist.append(self.sim.simt)
-        self.hist.append(self.avgdHDG)
+        self.histgs.append(np.average(self.traf.gs))
+        if self.rarea.surfacearea > 0:
+            self.histntraf.append(self.traf.ntraf)
+            self.histrantraf.append(self.rarea.ntraf)
+        else:
+            self.histntraf.append(0)
+            self.histrantraf.append(0)
         if self.swprint:
-            print "Average dHDG: " + str(int(self.avgdHDG)) + " deg"
-        return self.avgdHDG
+            print "Average V: " + str(np.average(self.traf.gs)) + " m/s"
+            if self.rarea.surfacearea > 0:
+                print "Number of AC: " + str(self.traf.ntraf)
+                print "Number in RA: " + str(self.rarea.ntraf)
+        return
+
+    def gethist(self):
+        return np.array((self.timehist, self.histgs)), \
+                np.array((self.timehist, self.histntraf)), \
+                np.array((self.timehist, self.histrantraf))
 
 class RangeDot(Metrics):
     """ METRIC: RANGE RATE
@@ -203,26 +235,56 @@ class RangeDot(Metrics):
         # get cosine out of for-loop and do once with np
         bearingcomponent = np.cos(np.radians(bearing))
         np.fill_diagonal(bearingcomponent, 0) # set zero for own
-        for i in range(self.numberofac):
-            for j in range(self.numberofac):
+        for i in range(self.asas.alt.size):
+            for j in range(self.asas.alt.size):
                 self.rdot[i, j] = -1*(self.traf.gs[i]*bearingcomponent[i][j]+ \
                     self.traf.gs[j]*bearingcomponent[j][i])
         return
 
     def update(self):
         """ update metric """
-        self.numberofac = len(self.traf.gs)
-        self.rdot = np.zeros((self.numberofac, self.numberofac))
+        numberofac = self.asas.alt.size
+        self.rdot = np.zeros((numberofac, numberofac))
         self._calcrdot_(self.geodata.qdrdist[:, :, 0])
         #self.calcrdot(geo.dhdg)
         mask = np.ones(self.rdot.shape, dtype=bool)
         mask = np.triu(mask, 1)
-        self.avgrdot = np.average(self.rdot[mask])
+        avgrdot = np.average(self.rdot[mask])
         self.timehist.append(self.sim.simt)
-        self.hist.append(self.avgrdot)
+        self.hist.append(avgrdot)
         if self.swprint:
-            print "Average rdot: " + str(int(self.avgrdot)) + " m/s"
-        return self.avgrdot
+            print "Average rdot: " + str(int(avgrdot)) + " m/s"
+        return avgrdot
+
+class RelativeHeading(Metrics):
+    """ METRIC: RELATIVE HEADING """
+    def __init__(self, sim, geodata, swprint):
+        Metrics.__init__(self, sim, geodata, swprint, self.__class__.__name__)
+
+    def update(self):
+        """ update metric """
+        mask = np.ones(self.geodata.dhdg.shape, dtype=bool)
+        mask = np.triu(mask, 1)
+        avgdHDG = np.average(np.abs(self.geodata.dhdg[mask]))
+        self.timehist.append(self.sim.simt)
+        self.hist.append(avgdHDG)
+        if self.swprint:
+            print "Average dHDG: " + str(int(avgdHDG)) + " deg"
+        return avgdHDG
+
+class RelativeVelocity(Metrics):
+    """ METRIC: RELATIVE VELOCITY """
+    def __init__(self, sim, geodata, swprint):
+        Metrics.__init__(self, sim, geodata, swprint, self.__class__.__name__)
+
+    def update(self):
+        """ update metric """
+        avgdV = sqrt(np.average(self.geodata.dVsqr))
+        self.timehist.append(self.sim.simt)
+        self.hist.append(avgdV)
+        if self.swprint:
+            print "Average dV: " + str(int(avgdV)) + " m/s"
+        return avgdV
 
 class TrafficDensity(Metrics):
     """ METRIC: TRAFFIC DENSITY
@@ -235,101 +297,11 @@ class TrafficDensity(Metrics):
 
     def update(self):
         """ update metric """
-        self.interval = 0
+        interval = 0
         if self.sim.rarea.surfacearea != 0:
-            self.interval = self.traf.ntraf / self.sim.rarea.surfacearea * 1000000.0
+            interval = self.traf.ntraf / self.sim.rarea.surfacearea * 1000000.0
             self.timehist.append(self.sim.simt)
-            self.hist.append(self.interval)
+            self.hist.append(interval)
             if self.swprint:
-                print "Traffic density: " + str(self.interval) + " AC/km2"
-        return self.interval
-
-class RelativeVelocity(Metrics):
-    """ METRIC: RELATIVE VELOCITY """
-    def __init__(self, sim, geodata, swprint):
-        Metrics.__init__(self, sim, geodata, swprint, self.__class__.__name__)
-
-    def update(self):
-        """ update metric """
-        self.avgdV = sqrt(np.average(self.geodata.dVsqr))
-        self.timehist.append(self.sim.simt)
-        self.hist.append(self.avgdV)
-        if self.swprint:
-            print "Average dV: " + str(int(self.avgdV)) + " m/s"
-        return self.avgdV
-
-class Other(Metrics):
-    """ Other, simpel to calculate metrics """
-    def __init__(self, sim, geodata, rarea, swprint):
-        Metrics.__init__(self, sim, geodata, swprint, self.__class__.__name__)
-        self.rarea = rarea
-        self.histgs = []
-        self.histntraf = []
-        self.histrantraf = []
-
-    def update(self):
-        """ update metric """
-        self.timehist.append(self.sim.simt)
-        self.histgs.append(np.average(self.traf.gs))
-        if self.rarea.surfacearea > 0:
-            self.histntraf.append(np.average(self.traf.ntraf))
-            self.histrantraf.append(np.average(self.rarea.ntraf))
-        else:
-            self.histntraf.append(0)
-            self.histrantraf.append(0)
-        if self.swprint:
-            print "Average V: " + str(np.average(self.traf.gs)) + " m/s"
-            if self.rarea.surfacearea > 0:
-                print "Number of AC: " + str(self.traf.ntraf)
-                print "Number in RA: " + str(self.rarea.ntraf)
-        return
-
-    def gethist(self):
-        return np.array((self.timehist, self.histgs)), \
-                np.array((self.timehist, self.histntraf)), \
-                np.array((self.timehist, self.histrantraf))
-
-class AirspaceQuality(Metrics):
-    """ METRIC: AirspaceQuality """
-    def __init__(self, sim, geodata, swprint):
-        Metrics.__init__(self, sim, geodata, swprint, self.__class__.__name__)
-
-    @staticmethod
-    def dcpa2todcpa(dcpa2):
-        """ Convert DCPA2 to DCPA in meters, do not allow zero values"""
-        dcpa = np.sqrt(dcpa2)
-        return dcpa # in m
-        #return np.sqrt(dcpa2)/1852. # in NM
-
-    @staticmethod
-    def purgezeros(array, replacement):
-        """ Checks an array for zeros and replaces it with a small value """
-        array[array == 0] = replacement
-        return array
-        
-    def update(self, rdot):
-        """ update metric """
-        mask = np.ones(self.geodata.dhdg.shape, dtype=bool)
-        mask = np.triu(mask, 1)
-        np.average(np.abs(self.geodata.dhdg[mask]))
-        tcpa = self.asas.tcpa
-        dcpa = self.dcpa2todcpa(self.asas.dcpa2)
-        
-        self.purgezeros(dcpa, 0.01)
-        self.purgezeros(tcpa, 0.1)
-        # With this rdot 0 ac pairs are considered having a near zero diverging range
-        self.purgezeros(rdot, 0.1)  
-        if (tcpa[mask] < 0).all():
-            print "THERE ARE NEGATIVE TIME VALUES"
-        if (dcpa[mask] < 0).all():
-            print "THERE ARE NEGATIVE RANGE VALUES"
-            
-        pairsafetylevel = np.multiply(rdot[mask], 1. / (dcpa[mask] * tcpa[mask]))
-
-        self.airspacesafetylevel = np.sum(pairsafetylevel)/pairsafetylevel.size
-
-        self.timehist.append(self.sim.simt)
-        self.hist.append(self.airspacesafetylevel)
-        if self.swprint:
-            print "ASQ SL: %f" % self.airspacesafetylevel
-        return self.airspacesafetylevel
+                print "Traffic density: " + str(interval) + " AC/km2"
+        return interval

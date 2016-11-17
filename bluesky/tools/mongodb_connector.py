@@ -5,25 +5,25 @@ This module provides a connection to aircraft saved in a mongoDB database
     On the interval set the update function will grab the dataset from the queue and process it.
 
 """
-
+from . import Toolsmodule
+from .. import settings
 import pymongo
 import threading
 import Queue
 import time
 from datetime import datetime
 from ..tools.mongodb_filterpipe import getfilter
-from .. import stack
-from .. import settings
 
-# Ignores dynamically created settings:
+# Ignores dynamically created settings in pylint:
 # pylint: disable=no-member
 
-class MongoDB():
+class MongoDB(Toolsmodule):
     """ Class contains functions allowing to set up a connection with a MongoDB database """
-    def __init__(self, sim):
-        self.sim = sim
-        self.traf = sim.traf
-        self.add_stack_commands(sim)
+    def __init__(self, sim, scr):
+        Toolsmodule.__init__(self, sim, scr, self.__class__.__name__)
+        cmddict = {"MONGODB": ["MONGODB ON/OFF", "onoff", \
+                    lambda *args: sim.mdb.toggle(args)]}
+        Toolsmodule.add_stack_commands(self, cmddict)
 
         host = settings.mdb_host
         port = settings.mdb_port
@@ -70,15 +70,6 @@ class MongoDB():
         self.mdbkill = threading.Event()
         self.mdbrun = threading.Event()
         self.dataqueue = Queue.Queue(maxsize=0)
-
-    @staticmethod
-    def add_stack_commands(sim):
-        """ Add mongodb command to stack """
-        cmddict = {"MONGODB": [ \
-                    "MONGODB ON/OFF", \
-                    "onoff", \
-                    lambda *args: sim.mdb.toggle(*args)]}
-        stack.append_commands(cmddict)
 
     def toggle(self, flag):
         """ turn the connector on or off """
@@ -160,24 +151,24 @@ class MongoDB():
                     cmdstr = 'CRE %s, %s, %f, %f, %f, %d, %d' % \
                             (acid, pos['mdl'], pos['loc']['lat'], \
                             pos['loc']['lng'], pos['hdg'], pos['alt'], pos['spd'])
-                    stack.stack(cmdstr)
+                    self.stack.stack(cmdstr)
                     createcount = createcount + 1
             else:
                 if self.starttime + self.sim.simt - pos['ts'] - delay > self.lostsignaltimeout:
                     print "Lost signal for %s %s seconds" % \
                             (pos['icao'], str(int(self.starttime + self.sim.simt - pos['ts'])))
-                    stack.stack('DEL %s' % pos['icao'])
+                    self.stack.stack('DEL %s' % pos['icao'])
                 else:
                     if self.starttime + self.sim.simt - pos['ts'] < self.intervaltime + delay + 10:
                         cmdstr = 'MOVE %s, %f, %f, %d' % \
                             (acid, pos['loc']['lat'], pos['loc']['lng'], pos['alt'])
-                        stack.stack(cmdstr)
+                        self.stack.stack(cmdstr)
 
                         cmdstr = 'HDG %s, %f' % (acid, pos['hdg'])
-                        stack.stack(cmdstr)
+                        self.stack.stack(cmdstr)
 
                         cmdstr = 'SPD %s, %f' % (acid, pos['spd'])
-                        stack.stack(cmdstr)
+                        self.stack.stack(cmdstr)
         if createcount > 0:
             print "Created " + str(createcount) + " AC"
         return

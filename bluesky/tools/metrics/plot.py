@@ -15,29 +15,71 @@ class MetricsPlot(object):
     """ Plots metrics """
     def __init__(self, sim):
         self.sim = sim
-        self.figdd = None
-        self.fighist = None
-        self.figevo = None
-        self.fig3d = None
 
-    def saveplot(self):
-        """ Save plot"""
-        if self.figdd is not None:
-            fname = os.path.dirname(__file__) + "/../../../data/output/" \
-            + strftime("%Y-%m-%d-%H-%M-%S-BlueSkyDD.png", gmtime())
-            self.figdd.savefig(fname, transparent=True)
-        if self.fighist is not None:
-            fname = os.path.dirname(__file__) + "/../../../data/output/" \
-            + strftime("%Y-%m-%d-%H-%M-%S-BlueSkyHIST.png", gmtime())
-            self.fighist.savefig(fname, transparent=True)
-        if self.figevo is not None:
-            fname = os.path.dirname(__file__) + "/../../../data/output/" \
-            + strftime("%Y-%m-%d-%H-%M-%S-BlueSkyEVO.png", gmtime())
-            self.figevo.savefig(fname, transparent=True)
-        if self.fig3d is not None:
-            fname = os.path.dirname(__file__) + "/../../../data/output/" \
-            + strftime("%Y-%m-%d-%H-%M-%S-BlueSky3D.png", gmtime())
-            self.fig3d.savefig(fname, transparent=True)
+        self.fig3d = None
+        self.figcrdist = None
+        self.figdd = None
+        self.figevo = None
+        self.fighist = None
+
+    @staticmethod
+    def _2dfilter_(x, xlow, xhigh, y, ylow, yhigh):
+        """ returns a trimmed and flattened data set """
+        mask = np.ones(x.shape, dtype=bool)
+        mask = np.greater(x, xlow) & np.less(x, xhigh) & np.greater(y, ylow) & np.less(y, yhigh)
+        np.triu(mask, 1)
+        return x[mask].flatten(), y[mask].flatten()
+
+    def _3dfilter_(self, dcpa, tcpa, rdot):
+        """ Filters irrelevant data before 3D plot """
+        mask = np.ones(dcpa.shape, dtype=bool)
+        # mask = np.greater(tcpa, 0) & np.less(tcpa, 1800)
+        mask = np.greater(dcpa, 0) & np.less(dcpa, 50) & np.greater(tcpa, 0) & np.less(tcpa, 300)
+        np.fill_diagonal(mask, 0)
+        colorarray = self._colorboxes_(dcpa, tcpa, rdot)
+        return dcpa[mask], tcpa[mask], rdot[mask], colorarray[mask]
+
+    def _boxquantities_(self, dcpa, tcpa):
+        """ Print the number of AC in each box """
+        traf = self.sim.traf
+        ntrafsqvalid = traf.ntraf*(traf.ntraf-1)/2
+        mask = np.ones(dcpa.shape, dtype=bool)
+        print "Unfiltered datapoints: %i" % (ntrafsqvalid)
+        mask = np.greater(dcpa, 0) & np.greater(tcpa, 0)
+        print "Future collisions: %i / %i" % (np.count_nonzero(mask), ntrafsqvalid)
+        mask = np.greater(dcpa, 0) & np.greater(tcpa, 0) & np.less(tcpa, 300)
+        print "TCPA less than 5min: %i / %i)" % (np.count_nonzero(mask), ntrafsqvalid)
+        mask = np.greater(dcpa, 0) & np.less(dcpa, 50) & np.greater(tcpa, 0)
+        print "DCPA less than 50NM: %i / %i)" % (np.count_nonzero(mask), ntrafsqvalid)
+        mask = np.greater(dcpa, 0) & np.less(dcpa, 20) & np.greater(tcpa, 0) & np.less(tcpa, 300)
+        print "Combine max DCPA and TCPA: %i / %i)" % (np.count_nonzero(mask), ntrafsqvalid)
+
+    @staticmethod
+    def _densitymap_(x, y):
+        """ Input x, y of data points. Returns x, y ,z sorted by z(density) """
+        xy = np.vstack([x, y])
+        z = gaussian_kde(xy)(xy)
+        idx = z.argsort()
+        return x[idx], y[idx], z[idx]
+
+    @staticmethod
+    def _colorboxes_(dcpa, tcpa, rdot):
+        """ Return array with colors for data points """
+        colorarray = np.chararray(rdot.shape)
+        colorarray[:] = 'b'
+        mask = np.greater(rdot, 0)
+        colorarray[mask] = 'g'
+        mask = np.less(rdot, 0) & np.less(dcpa, 15) & np.less(tcpa, 300)
+        colorarray[mask] = 'y'
+        mask = np.greater(dcpa, 0) & np.less(dcpa, 10) & \
+                np.greater(tcpa, 0) & np.less(tcpa, 60) & np.less(rdot, -25)
+        colorarray[mask] = 'r'
+        return colorarray
+
+    @staticmethod
+    def dcpa2todcpa(dcpa2):
+        """ Convert DCPA2 to DCPA in NM"""
+        return np.sqrt(dcpa2)/1852.
 
     def plot3d(self, rdot):
         """ Plots 3D map """
@@ -68,63 +110,21 @@ class MetricsPlot(object):
         figmanager.window.showMaximized()
         plt.show()
 
-    def _boxquantities_(self, dcpa, tcpa):
-        """ Print the number of AC in each box """
-        traf = self.sim.traf
-        ntrafsqvalid = traf.ntraf*(traf.ntraf-1)/2
-        mask = np.ones(dcpa.shape, dtype=bool)
-        print "Unfiltered datapoints: %i" % (ntrafsqvalid)
-        mask = np.greater(dcpa, 0) & np.greater(tcpa, 0)
-        print "Future collisions: %i / %i" % (np.count_nonzero(mask), ntrafsqvalid)
-        mask = np.greater(dcpa, 0) & np.greater(tcpa, 0) & np.less(tcpa, 300)
-        print "TCPA less than 5min: %i / %i)" % (np.count_nonzero(mask), ntrafsqvalid)
-        mask = np.greater(dcpa, 0) & np.less(dcpa, 50) & np.greater(tcpa, 0)
-        print "DCPA less than 50NM: %i / %i)" % (np.count_nonzero(mask), ntrafsqvalid)
-        mask = np.greater(dcpa, 0) & np.less(dcpa, 20) & np.greater(tcpa, 0) & np.less(tcpa, 300)
-        print "Combine max DCPA and TCPA: %i / %i)" % (np.count_nonzero(mask), ntrafsqvalid)
+    def plotcrdistribution(self, conflictrates):
+        """ Plot conflict rates distribution """
+        if self.figcrdist is None:
+            self.figcrdist = plt.figure()
+        plt.clf() # Fresh plots
+        self.figcrdist.add_subplot(111)
+        plt.hist(conflictrates)
+        #plt.xlim(-1, 800)
+        plt.ylabel(r'$f [-]$')
+        plt.xlabel(r'$Cr [X]$')
+        plt.title("Conflict rate")
 
-    @staticmethod
-    def dcpa2todcpa(dcpa2):
-        """ Convert DCPA2 to DCPA """
-        return np.sqrt(dcpa2)/1852.
-
-    @staticmethod
-    def _colorboxes_(dcpa, tcpa, rdot):
-        """ Return array with colors for data points """
-        colorarray = np.chararray(rdot.shape)
-        colorarray[:] = 'b'
-        mask = np.greater(rdot, 0)
-        colorarray[mask] = 'g'
-        mask = np.less(rdot, 0) & np.less(dcpa, 15) & np.less(tcpa, 300)
-        colorarray[mask] = 'y'
-        mask = np.greater(dcpa, 0) & np.less(dcpa, 10) & \
-                np.greater(tcpa, 0) & np.less(tcpa, 60) & np.less(rdot, -25)
-        colorarray[mask] = 'r'
-        return colorarray
-
-    def _3dfilter_(self, dcpa, tcpa, rdot):
-        """ Filters irrelevant data before 3D plot """
-        mask = np.ones(dcpa.shape, dtype=bool)
-        # mask = np.greater(tcpa, 0) & np.less(tcpa, 1800)
-        mask = np.greater(dcpa, 0) & np.less(dcpa, 50) & np.greater(tcpa, 0) & np.less(tcpa, 300)
-        np.fill_diagonal(mask, 0)
-        colorarray = self._colorboxes_(dcpa, tcpa, rdot)
-        return dcpa[mask], tcpa[mask], rdot[mask], colorarray[mask]
-
-    @staticmethod
-    def _densitymap_(x, y):
-        """ Input x, y of data points. Returns x, y ,z sorted by z(density) """
-        xy = np.vstack([x, y])
-        z = gaussian_kde(xy)(xy)
-        idx = z.argsort()
-        return x[idx], y[idx], z[idx]
-
-    @staticmethod
-    def _2dfilter_(x, xlow, xhigh, y, ylow, yhigh):
-        mask = np.ones(x.shape, dtype=bool)
-        mask = np.greater(x, xlow) & np.less(x, xhigh) & np.greater(y, ylow) & np.less(y, yhigh)
-        np.triu(mask, 1)
-        return x[mask].flatten(), y[mask].flatten()
+        figmanager = plt.get_current_fig_manager()
+        figmanager.window.showMaximized()
+        plt.show()
 
     def plotdynamicdensity(self, geo, rdot):
         """ Plot Dynamic Density Map """
@@ -210,6 +210,74 @@ class MetricsPlot(object):
         figmanager.window.showMaximized()
         plt.show()
 
+    def plotevolution(self, rdot, other, confperac, conflictrate, vrel, dhdg, trafficdensity):
+        """ Evolution of averages over time """
+        sim = self.sim
+        if self.figevo is None:
+            self.figevo = plt.figure()
+        plt.clf() # Fresh plots
+        if sim.rarea.surfacearea <= 0:
+            return
+        histgs, histntraf, histrantraf = other.gethist()
+
+        self.figevo.add_subplot(331)
+        plt.plot(histntraf[0, :], histntraf[1, :])
+        plt.title("#AC evolution")
+        plt.ylim(ymax=(max(histntraf[1, :])*1.1))
+        plt.ylabel(r'$AC [-]$')
+
+        self.figevo.add_subplot(332)
+        plt.plot(histrantraf[0, :], histrantraf[1, :])
+        plt.title("#AC in RA evolution")
+        plt.ylabel(r'$AC [-]$')
+
+        self.figevo.add_subplot(333)
+        hist = confperac.gethist()
+        plt.plot(hist[0, :], hist[1, :])
+        plt.ylabel(r'$conflicts/AC [-]$')
+        plt.title("Conflicts per AC evolution")
+
+        self.figevo.add_subplot(334)
+        hist = conflictrate.gethist()
+        plt.plot(hist[0, :], hist[1, :])
+        plt.ylabel(r'$Cr [-]$')
+        plt.title("Cr evolution")
+
+        self.figevo.add_subplot(335)
+        plt.plot(histgs[0, :], histgs[1, :])
+        plt.ylabel(r'$V [m/s]$')
+        plt.title("Average V evolution")
+
+        self.figevo.add_subplot(336)
+        hist = vrel.gethist()
+        plt.plot(hist[0, :], hist[1, :])
+        plt.ylabel(r'$V [m/s]$')
+        plt.title("Average relative V evolution")
+
+        self.figevo.add_subplot(337)
+        hist = dhdg.gethist()
+        plt.plot(hist[0, :], hist[1, :])
+        plt.ylabel(r'$HDG [^\circ]$')
+        plt.title("Average relative HDG evolution")
+
+        self.figevo.add_subplot(338)
+        hist = trafficdensity.gethist()
+        plt.plot(hist[0, :], hist[1, :])
+        plt.ylabel(r'$AC/km^2$')
+        plt.title("Traffic density evolution")
+
+        self.figevo.add_subplot(339)
+        hist = rdot.gethist()
+        plt.plot(hist[0, :], hist[1, :])
+        plt.ylabel(r'$\.r [m/s]$')
+        plt.title("Average range rate evolution")
+
+        figmanager = plt.get_current_fig_manager()
+        figmanager.window.showMaximized()
+
+        plt.draw()
+        plt.show()
+
     def plothistograms(self, geo, rdot):
         """ Plot Histograms """
 
@@ -266,69 +334,25 @@ class MetricsPlot(object):
         plt.draw()
         plt.show()
 
-    def plotevolution(self, rdot, other, confperac, conflictrate, vrel, dhdg, trafficdensity):
-        """ Evolution of averages over time """
-        sim = self.sim
-        if self.figevo is None:
-            self.figevo = plt.figure()
-        plt.clf() # Fresh plots
-        if sim.rarea.surfacearea <= 0:
-            return
-        histgs, histntraf, histrantraf = other.gethist()
-
-        self.figevo.add_subplot(331)
-        plt.plot(histntraf[0, :], histntraf[1, :])
-        plt.title("#AC evolution")
-        plt.ylabel(r'$AC [-]$')
-
-        self.figevo.add_subplot(332)
-        plt.plot(histrantraf[0, :], histrantraf[1, :])
-        plt.title("#AC in RA evolution")
-        plt.ylabel(r'$AC [-]$')
-
-        self.figevo.add_subplot(333)
-        hist = confperac.gethist()
-        plt.plot(hist[0, :], hist[1, :])
-        plt.ylabel(r'$conflicts/AC [-]$')
-        plt.title("Conflicts per AC evolution")
-
-        self.figevo.add_subplot(334)
-        hist = conflictrate.gethist()
-        plt.plot(hist[0, :], hist[1, :])
-        plt.ylabel(r'$Cr [-]$')
-        plt.title("Cr evolution")
-
-        self.figevo.add_subplot(335)
-        plt.plot(histgs[0, :], histgs[1, :])
-        plt.ylabel(r'$V [m/s]$')
-        plt.title("Average V evolution")
-
-        self.figevo.add_subplot(336)
-        hist = vrel.gethist()
-        plt.plot(hist[0, :], hist[1, :])
-        plt.ylabel(r'$V [m/s]$')
-        plt.title("Average relative V evolution")
-
-        self.figevo.add_subplot(337)
-        hist = dhdg.gethist()
-        plt.plot(hist[0, :], hist[1, :])
-        plt.ylabel(r'$HDG [^\circ]$')
-        plt.title("Average relative HDG evolution")
-
-        self.figevo.add_subplot(338)
-        hist = trafficdensity.gethist()
-        plt.plot(hist[0, :], hist[1, :])
-        plt.ylabel(r'$AC/km^2$')
-        plt.title("Traffic density evolution")
-
-        self.figevo.add_subplot(339)
-        hist = rdot.gethist()
-        plt.plot(hist[0, :], hist[1, :])
-        plt.ylabel(r'$\.r [m/s]$')
-        plt.title("Average range rate evolution")
-
-        figmanager = plt.get_current_fig_manager()
-        figmanager.window.showMaximized()
-
-        plt.draw()
-        plt.show()
+    def saveplot(self):
+        """ Save plot"""
+        if self.figdd is not None:
+            fname = os.path.dirname(__file__) + "/../../../data/output/" \
+            + strftime("%Y-%m-%d-%H-%M-%S-BlueSkyDD.eps", gmtime())
+            self.figdd.savefig(fname, transparent=True, format='eps')
+        if self.fighist is not None:
+            fname = os.path.dirname(__file__) + "/../../../data/output/" \
+            + strftime("%Y-%m-%d-%H-%M-%S-BlueSkyHIST.eps", gmtime())
+            self.fighist.savefig(fname, transparent=True, format='eps')
+        if self.figevo is not None:
+            fname = os.path.dirname(__file__) + "/../../../data/output/" \
+            + strftime("%Y-%m-%d-%H-%M-%S-BlueSkyEVO.eps", gmtime())
+            self.figevo.savefig(fname, transparent=True, format='eps')
+        if self.fig3d is not None:
+            fname = os.path.dirname(__file__) + "/../../../data/output/" \
+            + strftime("%Y-%m-%d-%H-%M-%S-BlueSky3D.eps", gmtime())
+            self.fig3d.savefig(fname, transparent=True, format='eps')
+        if self.figcrdist is not None:
+            fname = os.path.dirname(__file__) + "/../../../data/output/" \
+            + strftime("%Y-%m-%d-%H-%M-%S-BlueSkyCR.eps", gmtime())
+            self.figevo.savefig(fname, transparent=True, format='eps')

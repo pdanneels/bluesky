@@ -21,7 +21,7 @@ class Synthetic():
 
         stackcmd = {"SYN": [ \
                 " SYN: Possible subcommands: HELP, SIMPLE, SIMPLED, DIFG, SUPER,\n" + \
-                "MATRIX, FLOOR, TAKEOVER, WALL, ROW, COLUMN, DISP", "txt,[...]", \
+                "MATRIX, FLOOR, OVERTAKE, WALL, ROW, COLUMN", "txt,[...]", \
                 lambda *args: sim.syn.process(args[0], len(args) - 1, args, sim)\
                 ]}
         stack.append_commands(stackcmd)
@@ -57,7 +57,7 @@ class Synthetic():
         elif command == "HELP":
             return True, ("This is the synthetic traffic scenario module\n" \
                 "Possible subcommands: HELP, SIMPLE, SIMPLED, DIFG, SUPER, SPHERE, " \
-                "MATRIX, FLOOR, TAKEOVER, WALL, ROW, COLUMN, DISP")
+                "MATRIX, FLOOR, OVERTAKE, WALL, ROW, COLUMN")
 
         #create a perpendicular conflict between two aircraft
         elif command == "SIMPLE":

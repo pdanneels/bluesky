@@ -5,12 +5,11 @@ from ... import stack
 from ...stack.synthetic import Synthetic
 from ...tools import datalog, areafilter
 #from ...traf.metric import Metric
-from ...traf.metrics.metric_main import Metrics
+from ...tools.metrics.metric_main import MetricsModule
 #from ...tools.network import StackTelnetServer
 #from ...tools.datafeed import Modesbeast
-from ...tools.researcharea import Rarea
+from ...tools.researcharea import ResearchArea
 from ...tools.mongodb_connector import MongoDB
-
 
 class Simulation:
     """
@@ -53,15 +52,17 @@ class Simulation:
         self.traf = Traffic(navdb)
         self.navdb = navdb
         self.stack = stack.init(self, self.traf, gui.scr)
-        
+
         # Additional modules
         self.syn = Synthetic(self, gui.scr)
         self.beastfeed = None # Modesbeast(self.stack, self.traf)
         self.telnet_in = None # StackTelnetServer(self.stack)
-        self.rarea = Rarea(self, gui.scr)
+        self.rarea = ResearchArea(self, gui.scr)
         self.metric = None # Metric() OLD MODULE
-        self.metrics = Metrics(self)
-        self.mdb = MongoDB(self)
+        self.metrics = MetricsModule(self, gui.scr)
+        self.mdb = MongoDB(self, gui.scr)
+
+        self.count = 0
 
         # Initialize the stack module once
         stack.init(self, self.traf, gui.scr)
@@ -133,7 +134,6 @@ class Simulation:
         else:
             self.syst0 = self.syst - self.simt
             self.dt = 0.0
-
         return
 
     def scenarioInit(self, name):
@@ -158,7 +158,7 @@ class Simulation:
 
     def stop(self):  # Quit mode
         self.mode   = self.end
-        datalog.reset()        
+        datalog.reset()
 #        datalog.save()
         return
 

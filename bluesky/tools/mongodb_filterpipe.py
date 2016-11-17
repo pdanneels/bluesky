@@ -1,11 +1,17 @@
+"""
+    Filterpipe to pull required data from mongodb database
+
+"""
+
 from time import time
 
 def getfilter(filtertype, mintime, maxtime):
+    """ Returns filter """
     if filtertype == 'live' or filtertype == 'replay':
         if filtertype == 'live':
             mintime = time() - 300
             maxtime = time()
-            
+
         filterpipe = [{'$match' : { \
                         'icao' : {'$ne' : ''}, \
                         'mdl' : {'$ne' : ''}, \
@@ -40,7 +46,7 @@ def getfilter(filtertype, mintime, maxtime):
                             }
             }]
         return filterpipe
-        
+
     elif filtertype == 'metropolis':
         maxtime = mintime + 20
         filterpipe = [{'$match' : { \
@@ -77,6 +83,6 @@ def getfilter(filtertype, mintime, maxtime):
                             }
             }]
         return filterpipe
-    
+
     else:
         print "ERROR: Wrong filter pipe type"
