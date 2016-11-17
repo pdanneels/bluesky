@@ -104,7 +104,7 @@ class ScreenIO(QObject):
                 self.ctrlon -= 0.5
             elif args[0] == "RIGHT":
                 self.ctrlon += 0.5
-            elif args[0] == "UP" or args[0]== "ABOVE":
+            elif args[0] == "UP" or args[0] == "ABOVE":
                 self.ctrlat += 0.5
             elif args[0] == "DOWN":
                 self.ctrlat -= 0.5
@@ -147,7 +147,7 @@ class ScreenIO(QObject):
         elif objtype == 'LINE' or objtype[:4] == 'POLY':
             data = np.array(data_in, dtype=np.float32)
         elif objtype == 'BOX':
-            # BOX
+            # BOX: 0 = lat0, 1 = lon0, 2 = lat1, 3 = lat1 , use bounding box  
             data = np.array([data_in[0], data_in[1],
                              data_in[0], data_in[3],
                              data_in[2], data_in[3],
@@ -199,7 +199,7 @@ class ScreenIO(QObject):
         dt = np.maximum(t - self.prevtime, 0.00001)  # avoid divide by 0
         speed = (self.samplecount - self.prevcount) / dt * self.sim.simdt
         self.manager.sendEvent(SimInfoEvent(speed, self.sim.simdt, self.sim.simt,
-            self.sim.traf.ntraf, self.sim.state, stack.get_scenname()))
+            self.sim.simtclock, self.sim.traf.ntraf, self.sim.state, stack.get_scenname()))
         self.prevtime  = t
         self.prevcount = self.samplecount
 
