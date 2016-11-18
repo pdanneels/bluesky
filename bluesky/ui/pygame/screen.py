@@ -561,7 +561,7 @@ class Screen:
                 # Draw LINE or POLYGON with objdata = [lat0,lon,lat1,lon1,lat2,lon2,..]
                 if self.objtype[i]=='LINE' or self.objtype[i]=="POLY":
                     npoints = len(self.objdata[i])/2
-                    print npoints
+                    #print npoints
                     x0,y0 = self.ll2xy(self.objdata[i][0],self.objdata[i][1])
                     for j in range(1,npoints):
                         x1,y1 = self.ll2xy(self.objdata[i][j*2],self.objdata[i][j*2+1])

@@ -176,14 +176,12 @@ class ConflictRate(Metrics):
         # only calculate for new AC
         if len(self.conflictrates) < len(rarea.passedthrough):
             for i in range(len(self.conflictrates), len(rarea.passedthrough)):
-                self.conflictrates.append(rarea.passedthrough[i][3] * sep * \
-                (rarea.passedthrough[i][2] - rarea.passedthrough[i][1]) / rarea.surfacearea)
-
+                oneconflictrate = (rarea.passedthrough[i][3] * sep * \
+                    (rarea.passedthrough[i][2] - rarea.passedthrough[i][1])) / rarea.surfacearea
+                self.conflictrates.append(oneconflictrate)
+                print "CR * Ttot = %f" % (oneconflictrate)
+        
         avgconflictrate = np.average(self.conflictrates)
-        #avgconflictrate = np.average(np.array(groundspeeds)) * sep * \
-        #   np.average(np.array(timespendinra)) / rarea.surfacearea / \
-        #   (self.sim.simt - rarea.entrytime[0])
-
         self.hist.append(avgconflictrate)
         if self.swprint:
             print "Average conflict rate: " + str(avgconflictrate)

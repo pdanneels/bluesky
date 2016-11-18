@@ -71,7 +71,7 @@ class MetricsModule(Toolsmodule):
         if plottoshow == "CR" and len(self.conflictrate.conflictrates) != 0:
             # Plot conflictrates
             self.plot.plotcrdistribution(np.array(self.conflictrate.conflictrates) / \
-                self.sim.simt - self.sim.rarea.passedthrough[0][1])
+                (self.sim.simt - self.sim.rarea.passedthrough[0][1]))
             print "TOTALTIME is %f" % (self.sim.simt - self.sim.rarea.passedthrough[0][1])
             return
 
