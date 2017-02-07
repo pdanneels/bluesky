@@ -7,6 +7,7 @@ Part of metrics module, contains all classes for different metrics
 
 import numpy as np
 from math import sqrt
+import math
 from bluesky.tools.misc import degto180
 from bluesky.tools import geo
 
@@ -111,9 +112,36 @@ class AirspaceQuality(Metrics):
         array[array == 0] = replacement
         return array
 
+    def _calcasq_(self, rdotin):
+        if not self.traf.ntraf > 0:
+            return
+        rarea = self.sim.rarea
+        acinsidera = rarea.acinarea()
+        if not np.sum(acinsidera) > 0:
+            return
+        ramask = acinsidera*np.swapaxes([acinsidera], 0, 1)     
+        ramask = ramask.astype(bool)        
+        
+        dtlookahead = self.asas.dtlookahead
+        sep = 10 * 1852.
+        rsign = np.sign(rdotin[ramask])
+        
+        dcpa = self.dcpa2todcpa(self.asas.dcpa2[ramask])/sep
+        tcpa = self.asas.tcpa[ramask]/dtlookahead
+        asq = rsign*np.power((tcpa*dcpa),rsign)
+        asq = np.reshape(asq, (int(math.sqrt(asq.size)), -1))
+        
+        mask = np.ones(np.shape(asq), dtype=bool)
+        mask = np.triu(mask, 1)
+        asq = asq[mask]
+        globalasq = np.sum(asq)
+        print "Global level of ASQ: %f" % globalasq
+        return asq, globalasq
+        
     def update(self):
         """ update metric """
         tcpa = self.asas.tcpa
+        #print tcpa
         dcpa = self.dcpa2todcpa(self.asas.dcpa2)
         mask = np.ones(tcpa.shape, dtype=bool)
         mask = np.triu(mask, 1)
@@ -122,6 +150,7 @@ class AirspaceQuality(Metrics):
         self.purgezeros(tcpa, 0.1)
 
         pairsafetylevels = 1. / (dcpa[mask] * tcpa[mask])
+        
         averagesafetylevel = np.sum(pairsafetylevels)/pairsafetylevels.size
 
         self.timehist.append(self.sim.simt)
@@ -154,16 +183,16 @@ class ConflictRate(Metrics):
             - avgT is average time in research area [s]
             - A is research area [m2]
             - totT is total observation time [s]
+            totT is replaced by an expected max time for an aircraft flying the diagonal through the square area at 300m/s
 
     """
     def __init__(self, sim, geodata, swprint):
         Metrics.__init__(self, sim, geodata, swprint, self.__class__.__name__)
-        self.conflictrates = []     # Conflictrates times totaltime
+        self.conflictratedata = []     # Conflictrates times totaltime
 
     def update(self):
         """ update metric """
         rarea = self.sim.rarea
-        avgconflictrate = 0
         sep = 10 * 1852.
         self.timehist.append(self.sim.simt)
 
@@ -174,18 +203,13 @@ class ConflictRate(Metrics):
             return 0
 
         # only calculate for new AC
-        if len(self.conflictrates) < len(rarea.passedthrough):
-            for i in range(len(self.conflictrates), len(rarea.passedthrough)):
-                oneconflictrate = (rarea.passedthrough[i][3] * sep * \
-                    (rarea.passedthrough[i][2] - rarea.passedthrough[i][1])) / rarea.surfacearea
-                self.conflictrates.append(oneconflictrate)
-                print "CR * Ttot = %f" % (oneconflictrate)
-        
-        avgconflictrate = np.average(self.conflictrates)
-        self.hist.append(avgconflictrate)
-        if self.swprint:
-            print "Average conflict rate: " + str(avgconflictrate)
-        return avgconflictrate
+        if len(self.conflictratedata) < len(rarea.passedthrough):
+            for i in range(len(self.conflictratedata), len(rarea.passedthrough)):
+                vaverage = rarea.passedthrough[i][3]
+                tin = rarea.passedthrough[i][2] - rarea.passedthrough[i][1]
+                area = rarea.surfacearea
+                self.conflictratedata.append((vaverage,tin,area,sep))
+        return
 
 class Other(Metrics):
     """ Other, simpel to calculate metrics """

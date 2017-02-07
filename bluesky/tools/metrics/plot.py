@@ -21,6 +21,7 @@ class MetricsPlot(object):
         self.figdd = None
         self.figevo = None
         self.fighist = None
+        self.figasqdist = None
 
     @staticmethod
     def _2dfilter_(x, xlow, xhigh, y, ylow, yhigh):
@@ -109,6 +110,22 @@ class MetricsPlot(object):
         figmanager = plt.get_current_fig_manager()
         figmanager.window.showMaximized()
         plt.show()
+    
+    def plotasqdistribution(self, asqsafetylevels):
+        """ Plot asq safety level distribution """
+        if self.figasqdist is None:
+            self.figasqdist = plt.figure()
+        plt.clf() # Fresh plots
+        self.figasqdist.add_subplot(111)
+        plt.hist(asqsafetylevels, bins=np.arange(-80, 81, 1))
+        plt.ylabel(r'$f [-]$')
+        plt.xlabel(r'$ASQ [-]$')
+        plt.xlim(-80,80)
+        plt.title("Airspace Quality Safety Level")
+
+        figmanager = plt.get_current_fig_manager()
+        figmanager.window.showMaximized()
+        plt.show()
 
     def plotcrdistribution(self, conflictrates):
         """ Plot conflict rates distribution """
@@ -116,7 +133,7 @@ class MetricsPlot(object):
             self.figcrdist = plt.figure()
         plt.clf() # Fresh plots
         self.figcrdist.add_subplot(111)
-        plt.hist(conflictrates)
+        plt.hist(conflictrates, bins=100)
         #plt.xlim(-1, 800)
         plt.ylabel(r'$f [-]$')
         plt.xlabel(r'$Cr [X]$')

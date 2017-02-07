@@ -48,15 +48,15 @@ class ResearchArea(Toolsmodule):
         self.westb = min(lon0, lon1)
         self.surfacearea = geo.latlondist(self.southb, self.westb, self.southb, self.eastb) * \
                             geo.latlondist(self.southb, self.eastb, self.northb, self.eastb)
-        self.drawarea()
+        self.drawarea(self.northb, self.eastb, self.southb, self.westb)
         return True
 
-    def drawarea(self):
+    def drawarea(self, northb, eastb, southb, westb):
         """ Draw research area on screen """
-        self.scr.objappend("LINE", "RAREA", [self.northb, self.westb, self.northb, self.eastb])
-        self.scr.objappend("LINE", "RAREA", [self.northb, self.eastb, self.southb, self.eastb])
-        self.scr.objappend("LINE", "RAREA", [self.southb, self.eastb, self.southb, self.westb])
-        self.scr.objappend("LINE", "RAREA", [self.southb, self.westb, self.northb, self.westb])
+        self.scr.objappend("LINE", "RAREA", [northb, westb, northb, eastb])
+        self.scr.objappend("LINE", "RAREA", [northb, eastb, southb, eastb])
+        self.scr.objappend("LINE", "RAREA", [southb, eastb, southb, westb])
+        self.scr.objappend("LINE", "RAREA", [southb, westb, northb, westb])
 
     def acinarea(self):
         """ Returns numpy array of AC inside RA """

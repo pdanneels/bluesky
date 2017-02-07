@@ -7,6 +7,7 @@ Created by  : P. Danneels, 2016
 #     pylint: disable=E1101
 
 import numpy as np
+from math import sqrt
 from bluesky.tools import Toolsmodule
 from bluesky.tools.metrics.metrics import Metrics, RelativeVelocity, \
     ConflictRate, TrafficDensity, ConflictsPerAc, RangeDot, RelativeHeading, \
@@ -14,6 +15,7 @@ from bluesky.tools.metrics.metrics import Metrics, RelativeVelocity, \
 from bluesky.tools.metrics.plot import MetricsPlot
 from bluesky.tools.metrics.stats import MetricsStats
 from bluesky.tools.metrics.log import MetricsLog
+
 
 class MetricsModule(Toolsmodule):
     """ Handles metrics module """
@@ -23,6 +25,8 @@ class MetricsModule(Toolsmodule):
                     lambda *args: sim.metrics.toggle(args)], \
                     "SAVEPLOTS": ["SAVEPLOTS", "", \
                     lambda *args: sim.metrics.saveplots()], \
+                    "SAVEMETRICS": ["SAVEMETRICS", "", \
+                    lambda *args: sim.metrics.savemetrics()], \
                     "SHOWPLOT": ["SHOWPLOT EVOLUTION/CR/DENSITY/3D/HISTORGRAMS", "txt", \
                     lambda *args: sim.metrics.showplot(args[0])]}
         Toolsmodule.add_stack_commands(self, cmddict)
@@ -49,17 +53,32 @@ class MetricsModule(Toolsmodule):
         """ Initiate instances for metrics and plot/log/stats modules"""
         self.geodata = Metrics(self.sim, None, self.swprint, "geodata")
         self.conflictrate = ConflictRate(self.sim, self.geodata, self.swprint)
-        self.vrel = None #RelativeVelocity(self.sim, self.geodata, self.swprint)
-        self.trafficdensity = None #TrafficDensity(self.sim, self.geodata, self.swprint)
-        self.confperac = None #ConflictsPerAc(self.sim, self.geodata, self.swprint)
-        self.rdot = None #RangeDot(self.sim, self.geodata, self.swprint)
-        self.dhdg = None #RelativeHeading(self.sim, self.geodata, self.swprint)
-        self.other = None #Other(self.sim, self.geodata, self.sim.rarea, self.swprint)
-        self.asq = None #AirspaceQuality(self.sim, self.geodata, self.swprint)
-
+        self.rdot = RangeDot(self.sim, self.geodata, self.swprint)
+        self.asq = AirspaceQuality(self.sim, self.geodata, self.swprint)
+        
+        if False: # Evolution
+            self.vrel = RelativeVelocity(self.sim, self.geodata, self.swprint)
+            self.trafficdensity = TrafficDensity(self.sim, self.geodata, self.swprint)
+            self.confperac = ConflictsPerAc(self.sim, self.geodata, self.swprint)
+            self.dhdg = RelativeHeading(self.sim, self.geodata, self.swprint)
+            self.other = Other(self.sim, self.geodata, self.sim.rarea, self.swprint)
+        else:
+            self.vrel = None
+            self.trafficdensity = None
+            self.confperac = None
+            self.dhdg = None
+            self.other = None
+                
         self.plot = MetricsPlot(self.sim)
         self.log = MetricsLog(self.sim)
         self.stats = MetricsStats(self.sim)
+
+    def savemetrics(self):
+        """ Save metrics to file """
+        if self.rdot and self.other and self.confperac and self.conflictrate and \
+            self.vrel and self.dhdg and self.trafficdensity:
+            self.log.savemetrics_evolution(self.rdot, self.other, self.confperac, \
+                self.conflictrate, self.vrel, self.dhdg, self.trafficdensity)
 
     def saveplots(self):
         """ Save plots """
@@ -68,17 +87,28 @@ class MetricsModule(Toolsmodule):
     def showplot(self, plottoshow):
         """ Show plots """
 
-        if plottoshow == "CR" and len(self.conflictrate.conflictrates) != 0:
+        if plottoshow == "CR" and len(self.conflictrate.conflictratedata) != 0:
             # Plot conflictrates
-            self.plot.plotcrdistribution(np.array(self.conflictrate.conflictrates) / \
-                (self.sim.simt - self.sim.rarea.passedthrough[0][1]))
-            print "TOTALTIME is %f" % (self.sim.simt - self.sim.rarea.passedthrough[0][1])
+            tmax = sqrt(2*self.sim.rarea.surfacearea)/300
+            conflictrates = []
+            for x in self.conflictrate.conflictratedata:
+                vaverage, tin, area, sep = x
+                conflictrates.append(vaverage * sep * tin / (area * tmax))
+            self.plot.plotcrdistribution(conflictrates)
             return
 
         if not self.rdot:
             #needed for below plots
+            print "ERROR: no rdot present, only CR plot available"
             return
 
+        if plottoshow == "ASQ":
+            # 3D plot of aircraft pairs
+            asqsafetylevels, _ = self.asq._calcasq_(self.rdot.rdot)
+            self.plot.plotasqdistribution(asqsafetylevels)
+            self.stats._stats(asqsafetylevels)
+            return
+        
         if plottoshow == "3D":
             # 3D plot of aircraft pairs
             self.plot.plot3d(self.rdot)
@@ -102,6 +132,8 @@ class MetricsModule(Toolsmodule):
                 self.plot.plotevolution(self.rdot, self.other, self.confperac, \
                     self.conflictrate, self.vrel, self.dhdg, self.trafficdensity)
                 return
+            print "ERROR: not all required metrics are enabled to plot evolution"
+        print "ERROR: unknown plot type"
         return
 
     def toggle(self, flag):
@@ -113,8 +145,6 @@ class MetricsModule(Toolsmodule):
 
     def _updatemetrics_(self):
         """ Check if metric exists, if so: call update function """
-        if self.asq:
-            self.asq.update()
         if self.conflictrate:
             self.conflictrate.update()
         if self.confperac:
@@ -129,6 +159,8 @@ class MetricsModule(Toolsmodule):
             self.trafficdensity.update()
         if self.vrel:
             self.vrel.update()
+        if self.asq:
+            pass
 
     def update(self):
         """ Update all the metrics with the current set of traffic data """
@@ -154,15 +186,13 @@ class MetricsModule(Toolsmodule):
                 self.stack.stack("RAREA %f,%f,%f,%f" % (51, 3, 53.5, 7))
             rarea.update()
 
-        # Pause simulation, update metrics
         self.sim.pause() # "Lost time is never found again" - Benjamin Franklin -
+        
         if self.swsingleshot:
             self.sim.mdb.mdbkill.set() # free up resources, kill mdb connection
-            
-        self.geodata = None
-        self.geodata = Metrics(self.sim, None, self.swprint, "geodata")
         
         self.geodata.updategeodata()
+        
         if self.swprint: print "------------------------"
         self._updatemetrics_()
         if self.swprint: print "------------------------"

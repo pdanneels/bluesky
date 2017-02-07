@@ -11,7 +11,7 @@ from ...tools.metrics.metric_main import MetricsModule
 #from ...tools.network import StackTelnetServer
 #from ...tools.datafeed import Modesbeast
 from ...tools.researcharea import ResearchArea
-from ...tools.mongodb_connector import MongoDB
+from ...tools.mongodb.connector import MongoDB
 
 onedayinsec = 24*3600 # [s] time of one day in seconds for clock time
 
@@ -52,8 +52,8 @@ class Simulation:
         self.dts = []
 
         # Fixed dt mode for fast forward
-        self.ffmode = False  # Default FF off
-        self.fixdt = 0.1     # Default time step
+        self.ffmode = True  # Default FF off
+        self.fixdt = 0.5     # Default time step
         self.ffstop = -1.    # Indefinitely
 
         # Simulation objects
@@ -126,9 +126,7 @@ class Simulation:
             if self.beastfeed is not None:
                 self.beastfeed.update()
 
-            # Update the MongoDB feed
-            if self.mdb is not None:
-                self.mdb.update()
+
 
         # Always process stack
         stack.process(self, self.traf, scr)
@@ -142,6 +140,10 @@ class Simulation:
 
             # Update loggers
             datalog.postupdate()
+            
+            # Update the MongoDB feed
+            if self.mdb is not None:
+                self.mdb.update(self.ffmode)
 
         # HOLD/Pause mode
         else:

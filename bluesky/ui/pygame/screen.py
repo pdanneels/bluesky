@@ -134,8 +134,8 @@ class Screen:
 
         #--------------------------------MAPS---------------------------------
         # Read map of world
-        self.mapbmp = pg.image.load("data/graphics/world.jpg")
-        w, h = self.mapbmp.get_size()
+        self.mapbmp = None #pg.image.load("data/graphics/world.jpg")
+        w, h = 0,0 #self.mapbmp.get_size()
 
         # Two ref positions for scaling, convert to scaling factors x=a*lat+b
         x1, y1, lat1, lon1 = 0., 0., 90., -180.
@@ -145,7 +145,7 @@ class Screen:
         self.mapay = (y2 - y1) / (lat2 - lat1)
         self.mapby = y2 - self.mapay * lat2
 
-        self.swsat = True
+        self.swsat = False # True
 
         # Nav display projection mode
         self.swnavdisp = False
