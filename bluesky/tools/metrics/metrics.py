@@ -101,47 +101,66 @@ class AirspaceQuality(Metrics):
 
     @staticmethod
     def dcpa2todcpa(dcpa2):
-        """ Convert DCPA2 to DCPA in meters, do not allow zero values"""
-        dcpa = np.sqrt(dcpa2)
+        """ Convert DCPA2 to DCPA in meters, do not allow negative values"""
+        dcpa = np.sqrt(dcpa2.clip(0))
         return dcpa # in m
         #return np.sqrt(dcpa2)/1852. # in NM
 
     @staticmethod
-    def purgezeros(array, replacement):
+    def purgezeros(array, clip):
         """ Checks an array for zeros and replaces it with a small value """
-        array[array == 0] = replacement
+        for val in np.nditer(array):
+            if -1./clip < val < 0.:
+                val = -1./clip
+            elif 0. <= val < 1./clip:
+                val = 1./clip
         return array
 
-    def _calcasq_(self, rdotin):
+    def calcasq(self, rdotin):
+        """ Calculates ASQ """
         if not self.traf.ntraf > 0:
             return
         rarea = self.sim.rarea
         acinsidera = rarea.acinarea()
         if not np.sum(acinsidera) > 0:
             return
-        ramask = acinsidera*np.swapaxes([acinsidera], 0, 1)     
-        ramask = ramask.astype(bool)        
-        
+        ramask = acinsidera*np.swapaxes([acinsidera], 0, 1)
+        ramask = ramask.astype(bool)
+
+        clip = 10000.
         dtlookahead = self.asas.dtlookahead
         sep = 10 * 1852.
         rsign = np.sign(rdotin[ramask])
-        
         dcpa = self.dcpa2todcpa(self.asas.dcpa2[ramask])/sep
         tcpa = self.asas.tcpa[ramask]/dtlookahead
-        asq = rsign*np.power((tcpa*dcpa),rsign)
-        asq = np.reshape(asq, (int(math.sqrt(asq.size)), -1))
+
+        size = int(math.sqrt(tcpa.size))
+        mask = np.ones((size, size), dtype=bool)
+        mask = np.triu(mask, 1).flatten()
+
+        dcpa = dcpa[mask]
+        tcpa = tcpa[mask]
+        rsign = rsign[mask]
         
-        mask = np.ones(np.shape(asq), dtype=bool)
-        mask = np.triu(mask, 1)
-        asq = asq[mask]
+        print dcpa
+        print tcpa
+        print rsign
+
+        interim = -tcpa*dcpa
+        interim = self.purgezeros(interim, clip)
+
+        asq = np.power(interim, rsign)
+        if np.any(asq > clip) or np.any(asq < -clip):
+            asq = np.clip(asq, -clip, clip)
+            print "WARNING: Large values found in calculation, dataset clipped"
+
         globalasq = np.sum(asq)
         print "Global level of ASQ: %f" % globalasq
         return asq, globalasq
-        
+
     def update(self):
-        """ update metric """
+        """ Update metric DEPRICATED, NOT USED ANYMORE """
         tcpa = self.asas.tcpa
-        #print tcpa
         dcpa = self.dcpa2todcpa(self.asas.dcpa2)
         mask = np.ones(tcpa.shape, dtype=bool)
         mask = np.triu(mask, 1)
@@ -150,7 +169,7 @@ class AirspaceQuality(Metrics):
         self.purgezeros(tcpa, 0.1)
 
         pairsafetylevels = 1. / (dcpa[mask] * tcpa[mask])
-        
+
         averagesafetylevel = np.sum(pairsafetylevels)/pairsafetylevels.size
 
         self.timehist.append(self.sim.simt)
@@ -183,7 +202,8 @@ class ConflictRate(Metrics):
             - avgT is average time in research area [s]
             - A is research area [m2]
             - totT is total observation time [s]
-            totT is replaced by an expected max time for an aircraft flying the diagonal through the square area at 300m/s
+            totT is replaced by an expected max time for an aircraft flying
+            the diagonal through the square area at 300m/s
 
     """
     def __init__(self, sim, geodata, swprint):
@@ -208,7 +228,15 @@ class ConflictRate(Metrics):
                 vaverage = rarea.passedthrough[i][3]
                 tin = rarea.passedthrough[i][2] - rarea.passedthrough[i][1]
                 area = rarea.surfacearea
-                self.conflictratedata.append((vaverage,tin,area,sep))
+                self.conflictratedata.append((vaverage, tin, area, sep))
+        
+        tmax = sqrt(2*self.sim.rarea.surfacearea)/300
+        
+        conflictrates = []
+        for x in self.conflictratedata:
+            vaverage, tin, area, sep = x
+            conflictrates.append(vaverage * sep * tin / (area * tmax))
+        self.hist.append(np.average(conflictrates))
         return
 
 class Other(Metrics):
@@ -321,7 +349,7 @@ class TrafficDensity(Metrics):
         """ update metric """
         interval = 0
         if self.sim.rarea.surfacearea != 0:
-            interval = self.traf.ntraf / self.sim.rarea.surfacearea * 1000000.0
+            interval = self.sim.rarea.ntraf / self.sim.rarea.surfacearea * 1000000.0
             self.timehist.append(self.sim.simt)
             self.hist.append(interval)
             if self.swprint:

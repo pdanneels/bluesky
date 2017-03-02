@@ -34,17 +34,17 @@ class Synthetic():
 
         # change display settings and delete AC to generate own FF scenarios
         if command == "START":
-            scr.swgeo = False         # don't draw coastlines and borders
-            scr.swsat = False         # don't draw the satellite image
-            scr.apsw = 0              # don't draw airports
+            #scr.swgeo = False         # don't draw coastlines and borders
+            #scr.swsat = False         # don't draw the satellite image
+            #scr.apsw = 0              # don't draw airports
             #scr.swlabel = 0          # don't draw aircraft labels      # BROKEN
-            scr.wpsw = 0              # don't draw waypoints
-            scr.swfir = False         # don't show FIRs
-            scr.swgrid = True         # do show a grid
-            stack.stack("PAN 0,0")    # focus the map at the prime meridian and equator
-            scr.redrawradbg = True    # draw the background again
-            scr.swsep = True          # show circles of seperation between ac
-            scr.swspd = True          # show speed vectors of aircraft
+            #scr.wpsw = 0              # don't draw waypoints
+            #scr.swfir = False         # don't show FIRs
+            #scr.swgrid = True         # do show a grid
+            #stack.stack("PAN 0,0")    # focus the map at the prime meridian and equator
+            #scr.redrawradbg = True    # draw the background again
+            #scr.swsep = True          # show circles of seperation between ac
+            #scr.swspd = True          # show speed vectors of aircraft
             # scr.zoom(0.4, True)     # set zoom level to the standard distance
             # cmd.scenlines=[]        # skip the rest of the scenario
             # cmd.scencmd=[]          # skip the rest of the scenario
@@ -103,17 +103,20 @@ class Synthetic():
                 return True, callsign + "SUPER <NUMBER OF A/C>"
             else:
                 scr.isoalt = 0
+                originlat = 52.25
+                originlon = 5.
                 numac = int(float(cmdargs[1]))
-                distance = 0.50 #this is in degrees lat/lon, for now
+                dist = 100 # NM
                 alt = 20000*ft #ft
                 spd = 200 #kts
+                
                 for i in range(numac):
-                    angle = 2*np.pi/numac*i
+                    hdg = 360-360/numac*i
+                    lat, lon = geo.qdrpos(originlat, originlon, hdg, dist)
                     acid = "SUP" + str(i)
                     stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
-                        (acid, 'SUPER', distance*-np.cos(angle), distance*np.sin(angle), \
-                        360-360/numac*i, alt, spd))
-
+                        (acid, 'SUPER', lat, lon, hdg+180, alt, spd))
+                    
                 if SAVESCENARIOS:
                     fname = "super"+str(numac)
                     stack.stack("SAVEIC %s" % fname)
@@ -287,16 +290,15 @@ class Synthetic():
                 return True, callsign + "OVERTAKE <NUMBER OF A/C>"
             else:
                 numac = int(float(cmdargs[1]))
+                originlat = 52.25
+                originlon = 3.
                 scr.isoalt = 0
-
                 mperdeg = 111319.
-                vsteps = 50 #[m/s]
-                for v in range(vsteps, vsteps*(numac+1), vsteps): #m/s
+                
+                for v in range(numac): #m/s
                     acid = "OT"+str(v)
-                    distancetofly = v*5*60 #m
-                    degtofly = distancetofly/mperdeg
                     stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
-                        (acid, "OT", 0, -degtofly, 90, 20000*ft, v))
+                        (acid, "OT", originlat, originlon - 0.5*v-0.1 -0.2, 90, 20000*ft, 150 + 50*v))
                 if SAVESCENARIOS:
                     fname = "overtake"+str(numac)
                     stack.stack("SAVEIC %s" % fname)
@@ -373,9 +375,26 @@ class Synthetic():
                 try:
                      # start fresh
                     synerror, acalt, acspd, actype, startdistance, ang = self.__arguments__(numargs, cmdargs[1:])
-                    if synerror:
+                    
+                    scr.isoalt = 0
+                    originlat = 52.25
+                    originlon = 5.
+                    numac = int(float(cmdargs[1]))
+                    dist = 50 # NM
+                    alt = 20000*ft #ft
+                    spd = 200 #kts
+                
+                    for i in range(numac):
+                        hdg = 360-ang*2*i
+                        lat, lon = geo.qdrpos(originlat, originlon, hdg, dist)
+                        acid = "ANG" + str(i)
+                        stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
+                            (acid, 'CROSS', lat, lon, hdg+180, alt, spd))
+                    
+                    """                 if synerror:
                         raise Exception()
-
+                    originlat = 52.25
+                    originlon = 5.
                     mperdeg = 111319.
                     hsep = traf.asas.R # [m] horizontal separation minimum
                     hseplat = hsep/mperdeg
@@ -399,6 +418,7 @@ class Synthetic():
                             ("ANG"+str(i*2+1), actype, aclat, -aclon, 180-ang, acalt*ft, acspd))
 
                     stack.stack("PAN 0,0")
+                    """
                     return True
                 except Exception:
                     return False, 'unknown argument flag'

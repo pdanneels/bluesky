@@ -51,13 +51,22 @@ class MetricsStats(object):
     @staticmethod
     def _stats(datamatrix):
         """ print statistics """
-        print "Average: %f" % np.average(datamatrix)
-        print "Mean: %f" % np.mean(datamatrix)
-        print "Skewness: %f" % stats.skew(datamatrix)
-        print "Variation: %f" % stats.variation(datamatrix)
-        print "STD: %f" % stats.tstd(datamatrix)
-        print "SEM: %F" % stats.tsem(datamatrix)
-        print ""
+        stringbuffer = []
+        stringbuffer.append("Average: %f \n" % np.average(datamatrix))
+        stringbuffer.append("Mean: %f \n" % np.mean(datamatrix))
+        stringbuffer.append("Skewness: %f \n" % stats.skew(datamatrix))
+        stringbuffer.append("Variation: %f \n" % stats.variation(datamatrix))
+        stringbuffer.append("STD: %f \n" % stats.tstd(datamatrix))
+        stringbuffer.append("SEM: %F \n" % stats.tsem(datamatrix))
+        print stringbuffer
+#        print "Average: %f" % np.average(datamatrix)
+#        print "Mean: %f" % np.mean(datamatrix)
+#        print "Skewness: %f" % stats.skew(datamatrix)
+#        print "Variation: %f" % stats.variation(datamatrix)
+#        print "STD: %f" % stats.tstd(datamatrix)
+#        print "SEM: %F" % stats.tsem(datamatrix)
+#        print ""
+        return stringbuffer
 
     @staticmethod
     def _partlogline(datamatrix):

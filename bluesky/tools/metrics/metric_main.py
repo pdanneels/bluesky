@@ -6,8 +6,11 @@ Created by  : P. Danneels, 2016
 # To ignore numpy errors in pylint static code analyser:
 #     pylint: disable=E1101
 
+
 import numpy as np
+from os import path
 from math import sqrt
+from time import strftime, gmtime
 from bluesky.tools import Toolsmodule
 from bluesky.tools.metrics.metrics import Metrics, RelativeVelocity, \
     ConflictRate, TrafficDensity, ConflictsPerAc, RangeDot, RelativeHeading, \
@@ -56,7 +59,7 @@ class MetricsModule(Toolsmodule):
         self.rdot = RangeDot(self.sim, self.geodata, self.swprint)
         self.asq = AirspaceQuality(self.sim, self.geodata, self.swprint)
         
-        if False: # Evolution
+        if True: # Evolution
             self.vrel = RelativeVelocity(self.sim, self.geodata, self.swprint)
             self.trafficdensity = TrafficDensity(self.sim, self.geodata, self.swprint)
             self.confperac = ConflictsPerAc(self.sim, self.geodata, self.swprint)
@@ -83,6 +86,16 @@ class MetricsModule(Toolsmodule):
     def saveplots(self):
         """ Save plots """
         self.plot.saveplot()
+        fname = path.dirname(__file__) + "/../../../data/output/" \
+            + strftime("%Y-%m-%d-%H-%M-%S-BlueSkyASQstats.txt", gmtime())  
+        writefile = open(fname, "w")
+        writefile.writelines(self.logstatsbuffer)
+        writefile.close()
+        fname = path.dirname(__file__) + "/../../../data/output/" \
+            + strftime("%Y-%m-%d-%H-%M-%S-BlueSkyCRstats.txt", gmtime())  
+        writefile = open(fname, "w")
+        writefile.writelines(self.logstatsbuffer2)
+        writefile.close()
 
     def showplot(self, plottoshow):
         """ Show plots """
@@ -95,6 +108,7 @@ class MetricsModule(Toolsmodule):
                 vaverage, tin, area, sep = x
                 conflictrates.append(vaverage * sep * tin / (area * tmax))
             self.plot.plotcrdistribution(conflictrates)
+            self.logstatsbuffer2 = self.stats._stats(conflictrates)
             return
 
         if not self.rdot:
@@ -104,9 +118,10 @@ class MetricsModule(Toolsmodule):
 
         if plottoshow == "ASQ":
             # 3D plot of aircraft pairs
-            asqsafetylevels, _ = self.asq._calcasq_(self.rdot.rdot)
-            self.plot.plotasqdistribution(asqsafetylevels)
-            self.stats._stats(asqsafetylevels)
+            asqsafetylevels, _ = self.asq.calcasq(self.rdot.rdot)
+            self.plot.plotasqlindistribution(asqsafetylevels)
+            self.plot.plotasqlogdistribution(asqsafetylevels)
+            self.logstatsbuffer = self.stats._stats(asqsafetylevels)
             return
         
         if plottoshow == "3D":
@@ -196,14 +211,29 @@ class MetricsModule(Toolsmodule):
         if self.swprint: print "------------------------"
         self._updatemetrics_()
         if self.swprint: print "------------------------"
-
+        
+        if False:
+            self.stack.stack("SHOWPLOT ASQ")
+            self.stack.stack("SAVEPLOTS")
+            return
+        
         if abs(self.sim.simt-self.timer1) >= self.intervalplot:
             # You can add plot functions here that need updates on self.intervalplot
             if self.swplotevolution:
                 self.stack.stack("SHOWPLOT EVOLUTION")
+                
         self.timer1 = self.sim.simt
         if self.swstats: # Stats
             stats.printstats(self.geodata, self.rdot)
+        
+        if self.sim.simt >= 7200:
+            self.stack.stack("SHOWPLOT ASQ")
+            self.stack.stack("SHOWPLOT CR")
+            self.stack.stack("SHOWPLOT EVOLUTION")
+            self.stack.stack("SHOWPLOT HISTOGRAMS")
+            self.stack.stack("SHOWPLOT DENSITY")
+            self.stack.stack("SAVEPLOTS")
+            return
 
         # Finish up or unpause
         if self.swsingleshot:

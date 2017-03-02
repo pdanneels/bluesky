@@ -74,7 +74,7 @@ class ResearchArea(Toolsmodule):
 
         if self.entrytime[trackingid] == self.entrytime[0]:
             # AC spawned inside the RA are not tracked
-            return
+           return
 
         print "AC leaving RA: " + str(trackedacid)
         self.passedthrough.append((trackedacid, entrytime, leavetime, avggroundspeed))
@@ -90,12 +90,14 @@ class ResearchArea(Toolsmodule):
         traf = self.sim.traf
 
         i = 0
+        ntrafcounter = 0
         while i <= traf.ntraf-1:
             # Is this AC in the tracking area?
             inside = self.southb <= traf.lat[i] <= self.northb and \
                      self.westb <= traf.lon[i] <= self.eastb
 
             if inside:
+                ntrafcounter += 1
                 # Already tracking?
                 if traf.id[i] in self.trackingids:
                     trackingid = self.trackingids.index(traf.id[i])
@@ -116,5 +118,5 @@ class ResearchArea(Toolsmodule):
                         np.average(np.array(self.groundspeeds[trackingid])), trackingid)
 
             i += 1  # go check next AC
-        self.ntraf = len(self.trackingids)
+        self.ntraf = ntrafcounter
         return
