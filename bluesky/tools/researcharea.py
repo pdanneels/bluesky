@@ -9,6 +9,7 @@
 #     pylint: disable=E1101
 
 import numpy as np
+from collections import Counter
 from ..tools import geo
 from . import Toolsmodule
 
@@ -37,6 +38,12 @@ class ResearchArea(Toolsmodule):
         self.surfacearea = 0                    # Surface area of RA
         self.ntraf = 0                          # Number of AC in RA
         self.passedthrough = []                 # AC that passed through RA
+
+        self.conflicts = []                     # Conflicts: timestamp, (ac1, ac2)
+        self.cd = []                            # Conlficts detected
+        self.oldcd = []                         # Conflicts detected in previous update cycle
+        self.conflictdist = []
+        self.confperac = []
 
     def create(self, lat0, lon0, lat1, lon1):
         """ Create new research rectangular research area defined by lat/lon """
@@ -74,11 +81,11 @@ class ResearchArea(Toolsmodule):
 
         if self.entrytime[trackingid] == self.entrytime[0]:
             # AC spawned inside the RA are not tracked
-           return
+            return
 
         print "AC leaving RA: " + str(trackedacid)
         self.passedthrough.append((trackedacid, entrytime, leavetime, avggroundspeed))
-        
+
         # Delete AC from trackingDB
         del self.trackingids[trackingid]
         del self.entrytime[trackingid]
@@ -88,6 +95,9 @@ class ResearchArea(Toolsmodule):
         """ Update tracking DB """
         sim = self.sim
         traf = self.sim.traf
+
+        self.oldcd = self.cd
+        self.cd = []
 
         i = 0
         ntrafcounter = 0
@@ -106,8 +116,17 @@ class ResearchArea(Toolsmodule):
                 else:
                     # Add the AC to the tracking DB
                     self.trackingids.append(traf.id[i])
+                    #print "ADDED AN AC to TRACKINGDB"
                     self.entrytime.append(sim.simt)
                     self.groundspeeds.append([traf.gs[i]])
+                # CD
+                cdwithownship = [item for item in traf.asas.confpairs if item[0] == traf.id[i]]
+                #cdinarea = [item for item in traf.asas.confpairs if traf.id[i] in item]
+                if cdwithownship:
+                    for j in range(len(cdwithownship)):
+                        _, othership = cdwithownship[j]
+                        if othership in self.trackingids:
+                            self.cd.append(cdwithownship[j])
             else:
                 # AC is not in RA
                 # Were we tracking this AC in the area?
@@ -119,4 +138,19 @@ class ResearchArea(Toolsmodule):
 
             i += 1  # go check next AC
         self.ntraf = ntrafcounter
+        #print "Number of AC in RA: %i" % int(self.ntraf)
+
+        newcd = list(set(self.cd) - set(self.oldcd))
+        #print newcd
+        if newcd:
+            for i in range(len(newcd)):
+                self.conflicts.append((sim.simt, newcd[i]))
+                #print "ADDED NEW UNIQUE CONFLICT: "
+                #print newcd[i]
+        #print "Number of unique conflicts in RA: %i" % (len(self.conflictid)/2)
+
+        self.confperac = []
+        for j in range(len(traf.asas.iconf)):
+            self.confperac.append(len(traf.asas.iconf[j]))
+        self.conflictdist.append((sim.simt, Counter(self.confperac)))
         return

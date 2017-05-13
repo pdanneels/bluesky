@@ -58,7 +58,6 @@ class MetricsStats(object):
         stringbuffer.append("Variation: %f \n" % stats.variation(datamatrix))
         stringbuffer.append("STD: %f \n" % stats.tstd(datamatrix))
         stringbuffer.append("SEM: %F \n" % stats.tsem(datamatrix))
-        print stringbuffer
 #        print "Average: %f" % np.average(datamatrix)
 #        print "Mean: %f" % np.mean(datamatrix)
 #        print "Skewness: %f" % stats.skew(datamatrix)

@@ -103,8 +103,7 @@ class AirspaceQuality(Metrics):
     def dcpa2todcpa(dcpa2):
         """ Convert DCPA2 to DCPA in meters, do not allow negative values"""
         dcpa = np.sqrt(dcpa2.clip(0))
-        return dcpa # in m
-        #return np.sqrt(dcpa2)/1852. # in NM
+        return dcpa # in meters
 
     @staticmethod
     def purgezeros(array, clip):
@@ -141,10 +140,6 @@ class AirspaceQuality(Metrics):
         dcpa = dcpa[mask]
         tcpa = tcpa[mask]
         rsign = rsign[mask]
-        
-        print dcpa
-        print tcpa
-        print rsign
 
         interim = -tcpa*dcpa
         interim = self.purgezeros(interim, clip)
@@ -155,7 +150,6 @@ class AirspaceQuality(Metrics):
             print "WARNING: Large values found in calculation, dataset clipped"
 
         globalasq = np.sum(asq)
-        print "Global level of ASQ: %f" % globalasq
         return asq, globalasq
 
     def update(self):
@@ -193,8 +187,61 @@ class ConflictsPerAc(Metrics):
             print "Conflicts per AC: " + str(conflictsperac)
         return conflictsperac
 
+class AverageConflictRate(Metrics):
+    """ METRIC: Number of unique conflicts in the last 15min in RA """
+
+    def __init__(self, sim, geodata, swprint):
+        Metrics.__init__(self, sim, geodata, swprint, self.__class__.__name__)
+        self.conflictratedata = []              # Conflictrates
+        self.slidingwindowhorizon = 15*60       # [seconds]
+
+    def update(self):
+        """ update metric """
+        self.timehist.append(self.sim.simt)
+        rarea = self.sim.rarea
+
+        # only perform calculations if a research area is defined
+        if rarea.surfacearea == 0:
+            self.hist.append(0)
+            print "WARNING: NO RAREA FOUND FOR AVERAGE CR CALUCLATION"
+            return
+
+        count = 0
+        horizon = self.sim.simt - self.slidingwindowhorizon
+        if horizon < 0:
+            horizon = 0
+#            print "NOTICE: AVERAGE CR SET TO ZERO, NOT PAST FIRST HORIZON YET"
+#            self.hist.append(0)
+#            return
+
+        for conflictrate in rarea.conflicts:
+            if conflictrate[0] >= horizon:
+                count += 1
+        self.hist.append(count) # Number of unique conflicts in the last 15 minuties in RA
+
 class ConflictRate(Metrics):
-    """ METRIC: CONFLICT RATE
+    """ METRIC: CONFLICT RATE DISTRIBUTION """
+
+    def __init__(self, sim, geodata, swprint):
+        Metrics.__init__(self, sim, geodata, swprint, self.__class__.__name__)
+        self.conflictratedist = []              # Standard deviation
+
+    def update(self):
+        """ update metric """
+        self.timehist.append(self.sim.simt)
+        rarea = self.sim.rarea
+
+        # only perform calculations if a research area is defined
+        if rarea.surfacearea == 0:
+            self.hist.append(0)
+            print "WARNING: NO RAREA FOUND FOR CR CALUCLATION"
+            return 0
+        
+        self.conflictratedist.append(rarea.confperac)
+        self.hist.append(np.std(rarea.confperac))
+
+class ConflictRatePrediction(Metrics):
+    """ METRIC: CONFLICT RATE PREDICTION
 
     Cr = avgVg * R * avgT / ( A * totT )
     with:   - avgVg is average ground velocity [m/s]
@@ -229,9 +276,9 @@ class ConflictRate(Metrics):
                 tin = rarea.passedthrough[i][2] - rarea.passedthrough[i][1]
                 area = rarea.surfacearea
                 self.conflictratedata.append((vaverage, tin, area, sep))
-        
+
         tmax = sqrt(2*self.sim.rarea.surfacearea)/300
-        
+
         conflictrates = []
         for x in self.conflictratedata:
             vaverage, tin, area, sep = x

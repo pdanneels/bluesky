@@ -291,7 +291,7 @@ class Synthetic():
             else:
                 numac = int(float(cmdargs[1]))
                 originlat = 52.25
-                originlon = 3.
+                originlon = 5.
                 scr.isoalt = 0
                 mperdeg = 111319.
                 
@@ -307,18 +307,19 @@ class Synthetic():
         # create a conflict with several aircraft flying in a wall formation
         elif command == "WALL":
             scr.isoalt = 0
-
+            originlat = 52.25
+            originlon = 5.
             mperdeg = 111319.
             distance = 0.6 # in degrees lat/lon, for now
             hsep = traf.asas.R # [m] horizontal separation minimum
             hseplat = hsep/mperdeg
             wallsep = 1.1 #factor of extra space in the wall
             stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
-                ("OWNSHIP", "WALL", 0, -distance, 90, 20000*ft, 200))
+                ("OWNSHIP", "WALL", originlat, originlon-distance, 90, 20000*ft, 200))
             for i in range(20):
                 acid = "OTHER"+str(i)
                 stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
-                    (acid, "WALL", (i-10)*hseplat*wallsep, distance, 270, 20000*ft, 200))
+                    (acid, "WALL", originlat+(i-10)*hseplat*wallsep, originlon+distance, 270, 20000*ft, 200))
             if SAVESCENARIOS:
                 fname = "wall"
                 stack.stack("SAVEIC %s" % fname)

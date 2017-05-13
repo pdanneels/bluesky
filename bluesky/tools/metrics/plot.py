@@ -24,7 +24,7 @@ class MetricsPlot(object):
         self.fighist = None
         self.figasqdistlin = None
         self.figasqdistlog = None
-        
+
     @staticmethod
     def _2dfilter_(x, xlow, xhigh, y, ylow, yhigh):
         """ returns a trimmed and flattened data set """
@@ -125,7 +125,7 @@ class MetricsPlot(object):
         plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
         plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
         plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-        
+
         """ Plot asq safety level distribution """
         self.figasqdistlog = None
         if self.figasqdistlog is None:
@@ -134,15 +134,17 @@ class MetricsPlot(object):
         plt.clf() # Fresh plots
 
         self.figasqdistlog.add_subplot(111)
-        bins = -np.logspace(4.0, 0.0, 50)
-        bins2 = np.logspace(0.0, 4.0, 50)
-        binvector = np.append(bins, bins2)
-        plt.xscale('symlog')
+#
+#        bins = -np.logspace(4.0, 0.0, 50)
+#        bins2 = np.logspace(0.0, 4.0, 50)
+#        binvector = np.append(bins, bins2)
+        binvector = np.linspace(-10000, 10000, 161)
+#        plt.xscale('symlog')
         plt.grid(True)
-        plt.hist(asqsafetylevels, bins=binvector, color=self.plotcolor)
+        plt.hist(asqsafetylevels, log=True, bins=binvector, color=self.plotcolor)
         plt.ylabel(r'$f [-]$')
         plt.xlabel(r'$ASQ [-]$')
-        plt.title("Airspace Quality Safety Level - Logarithmic scale")
+        plt.title("Airspace Quality Safety Level - Wide range - Logarithmic scale")
 
         figmanager = plt.get_current_fig_manager()
         figmanager.window.showMaximized()
@@ -160,9 +162,9 @@ class MetricsPlot(object):
         plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
         plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
         plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-        
+
         """ Plot asq safety level distribution """
-        
+
         self.figasqdistlog = None
         if self.figasqdistlin is None:
             self.figasqdistlin = plt.figure()
@@ -172,11 +174,11 @@ class MetricsPlot(object):
         binvector = np.linspace(-80, 80, 161)
         #binvector = np.linspace(-10000, 10000, 801)
         plt.grid(True)
-        plt.hist(asqsafetylevels, bins=binvector, color=self.plotcolor)
+        plt.hist(asqsafetylevels, log=True, bins=binvector, color=self.plotcolor)
         plt.ylabel(r'$f [-]$')
         plt.xlabel(r'$ASQ [-]$')
         #plt.xlim(-80,80)
-        plt.title("Airspace Quality Safety Level - Linear scale")
+        plt.title("Airspace Quality Safety Level - Narrow range - Logarithmic scale")
 
         figmanager = plt.get_current_fig_manager()
         figmanager.window.showMaximized()
@@ -194,7 +196,7 @@ class MetricsPlot(object):
         plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
         plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
         plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-        
+
         self.figcrdist = None
         """ Plot conflict rates distribution """
         if self.figcrdist is None:
@@ -202,11 +204,14 @@ class MetricsPlot(object):
             plt.ion()
         plt.clf() # Fresh plots
         self.figcrdist.add_subplot(111)
-        plt.hist(conflictrates, bins=100, color=self.plotcolor)
-        #plt.xlim(-1, 800)
+        binsvector = np.linspace(0, 15, 16)
+        plt.hist(conflictrates, bins=binsvector, log=True, color=self.plotcolor, align='left')
+        #plt.bar(np.arange(0, 15), conflictrates, 1.0, color=self.plotcolor)
+        plt.xlim(-0.5, 15.5)
+        plt.grid(True)
         plt.ylabel(r'$f [-]$')
         plt.xlabel(r'$Cr [X]$')
-        plt.title("Conflict rate")
+        plt.title("Conflict rate distribution")
 
         figmanager = plt.get_current_fig_manager()
         figmanager.window.showMaximized()
@@ -224,7 +229,7 @@ class MetricsPlot(object):
         plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
         plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
         plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-        
+
         """ Plot Dynamic Density Map """
         sim = self.sim
 
@@ -249,7 +254,6 @@ class MetricsPlot(object):
         axis.set_xlabel(r'$t [s]$')
         axis.set_ylabel(r'$R [NM]$')
         axis.set_title("Range vs time to CPA")
-
         xlow = -1
         xhigh = 300
         ylow = -1
@@ -308,7 +312,8 @@ class MetricsPlot(object):
         figmanager.window.showMaximized()
         plt.show()
 
-    def plotevolution(self, rdot, other, confperac, conflictrate, vrel, dhdg, trafficdensity):
+    def plotevolution(self, rdot, other, confperac, avgconflictrate, conflictrate, \
+    vrel, dhdg, trafficdensity):
         SMALL_SIZE = 14
         MEDIUM_SIZE = 16
         BIGGER_SIZE = 18
@@ -320,7 +325,7 @@ class MetricsPlot(object):
         plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
         plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
         plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-        
+
         """ Evolution of averages over time """
         sim = self.sim
         self.figevo = None
@@ -343,16 +348,16 @@ class MetricsPlot(object):
         plt.ylabel(r'$AC [-]$')
 
         self.figevo.add_subplot(333)
-        hist = confperac.gethist()
+        hist = avgconflictrate.gethist()
         plt.plot(hist[0, :], hist[1, :], color=self.plotcolor)
-        plt.ylabel(r'$conflicts/AC [-]$')
-        plt.title("Conflicts per AC evolution")
+        plt.ylabel(r'$Cr [1/15min]$')
+        plt.title("Cr in RA evolution, 15min window")
 
         self.figevo.add_subplot(334)
         hist = conflictrate.gethist()
         plt.plot(hist[0, :], hist[1, :], color=self.plotcolor)
-        plt.ylabel(r'$Cr [-]$')
-        plt.title("Cr evolution")
+        plt.ylabel(r'$SD [-]$')
+        plt.title("SD of Cr distribution")
 
         self.figevo.add_subplot(335)
         plt.plot(histgs[0, :], histgs[1, :], color=self.plotcolor)
@@ -401,7 +406,7 @@ class MetricsPlot(object):
         plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
         plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
         plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-        
+
         """ Plot Histograms """
         sim = self.sim
         self.fighist = None
@@ -410,7 +415,7 @@ class MetricsPlot(object):
         plt.clf() # Fresh plots
         mask = np.ones((geo.size, geo.size), dtype=bool)
         #mask = np.triu(mask,1) # this is problematic for traf.ntraf<=2
-        mask = np.fill_diagonal(mask, 0) # exclude diagonal from data
+        np.fill_diagonal(mask, 0) # exclude diagonal from data
         self.fighist.add_subplot(231)
         velocity = np.squeeze(sim.traf.gs)
         plt.hist(velocity, bins=50, color=self.plotcolor)
@@ -422,17 +427,18 @@ class MetricsPlot(object):
         self.fighist.add_subplot(232)
         dvelocity = np.sqrt(geo.dVsqr[mask]).flatten()
         plt.hist(dvelocity, bins=50, color=self.plotcolor)
-        plt.xlim(-1, 800)
+        plt.xlim(0, 800)
         plt.ylabel(r'$f [-]$')
         plt.xlabel(r'$V [m/s]$')
         plt.title("Relative velocity")
 
         self.fighist.add_subplot(233)
         drange = geo.qdrdist[:, :, 1][mask].flatten()
-        plt.hist(drange, bins=50, color=self.plotcolor)
-        plt.xlim(-1, 600)
+        binvector = np.linspace(0,600,50)
+        plt.hist(drange, bins=binvector, color=self.plotcolor)
+        plt.xlim(0, 600)
         plt.ylabel(r'$f [-]$')
-        plt.xlabel(r'$R [m]$')
+        plt.xlabel(r'$R [NM]$')
         plt.title("Relative distance")
 
         self.fighist.add_subplot(234)

@@ -7,10 +7,12 @@ from time import time
 
 def getfilter(filtertype, mintime, maxtime, supermdb):
     """ Returns filter """
+    minalt = 3000 # ft
     if filtertype == 'replay' or filtertype == 'live':
         if supermdb and filtertype == 'replay':
             filterpipe = [{'$match' : { \
-                            'ts' : {'$gte' : mintime, '$lt' : maxtime}\
+                            'ts' : {'$gte' : mintime, '$lt' : maxtime}, \
+                            'alt' : {'$gte' : minalt} \
                             } \
                 }, \
                 {'$group' : {  \
@@ -50,6 +52,7 @@ def getfilter(filtertype, mintime, maxtime, supermdb):
                             'icao' : {'$ne' : ''}, \
                             'mdl' : {'$ne' : ''}, \
                             'ts' : {'$gte' : mintime, '$lt' : maxtime},\
+                            'alt' : {'$gte' : minalt}, \
                             'loc.lat' : {'$gte' : 50.5, '$lt': 54}, \
                             'loc.lng' : {'$gte' : 2.5, '$lt' : 7.5} \
                             } \
@@ -125,6 +128,7 @@ def getfilter(filtertype, mintime, maxtime, supermdb):
                             'icao' : {'$ne' : ''}, \
                             'mdl' : {'$ne' : ''}, \
                             'ts' : {'$gte' : mintime, '$lt' : maxtime}, \
+                            'alt' : {'$gte' : minalt}, \
                             'loc.lat' : {'$gte' : 50.5, '$lt': 54}, \
                             'loc.lng' : {'$gte' : 2.5, '$lt' : 7.5} \
                             } \

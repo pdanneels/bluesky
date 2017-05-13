@@ -46,7 +46,7 @@ class MongoDB(Toolsmodule):
         self.fetchfin = 0               # Finish time fetching data from server
 
         self.mode = 'replay'          # Mode, can be 'live', 'replay' or 'metropolis'
-        replaystart = '2017_01_10:11_00'  # Set to time you want to start replay "%Y_%m_%d:%H_%M"
+        replaystart = '2017_01_10:13_00'  # Set to time you want to start replay "%Y_%m_%d:%H_%M"
         metropoliscollection = 'OFF_FULLMIX_SET1_SNAP_fm_morninghgh_cr_off_ii_1407112255'
         if self.mode == 'metropolis':
             self._buildconnectionstring_(host, port, usernamemetr, passwordmetr, \
@@ -68,7 +68,7 @@ class MongoDB(Toolsmodule):
             self.starttime = time.mktime(datetime.strptime(extra, "%Y_%m_%d:%H_%M").timetuple())
             if self.swsupermdb:
                 self.coll = 'tempsuperset'
-                self._createsuperset_(self.starttime, self.starttime+3600*2, 'EHAM_' + extra[:10])
+                self._createsuperset_(self.starttime, self.starttime+3600*5, 'EHAM_' + extra[:10])
             else:
                 self.coll = 'EHAM_' + extra[:10]
             self.connectionoutput = "NOTICE: Connecting to collection: %s at %s" % \
