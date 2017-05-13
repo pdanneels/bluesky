@@ -113,43 +113,6 @@ class MetricsPlot(object):
         figmanager.window.showMaximized()
         plt.show()
 
-    def plotasqlogdistribution(self, asqsafetylevels):
-        SMALL_SIZE = 22
-        MEDIUM_SIZE = 24
-        BIGGER_SIZE = 26
-
-        plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
-        plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
-        plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
-        plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-        plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-        plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
-        plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-
-        """ Plot asq safety level distribution """
-        self.figasqdistlog = None
-        if self.figasqdistlog is None:
-            self.figasqdistlog = plt.figure()
-            plt.ion()
-        plt.clf() # Fresh plots
-
-        self.figasqdistlog.add_subplot(111)
-#
-#        bins = -np.logspace(4.0, 0.0, 50)
-#        bins2 = np.logspace(0.0, 4.0, 50)
-#        binvector = np.append(bins, bins2)
-        binvector = np.linspace(-10000, 10000, 161)
-#        plt.xscale('symlog')
-        plt.grid(True)
-        plt.hist(asqsafetylevels, log=True, bins=binvector, color=self.plotcolor)
-        plt.ylabel(r'$f [-]$')
-        plt.xlabel(r'$ASQ [-]$')
-        plt.title("Airspace Quality Safety Level - Wide range - Logarithmic scale")
-
-        figmanager = plt.get_current_fig_manager()
-        figmanager.window.showMaximized()
-        plt.show()
-
     def plotasqlindistribution(self, asqsafetylevels):
         SMALL_SIZE = 22
         MEDIUM_SIZE = 24
@@ -171,14 +134,22 @@ class MetricsPlot(object):
             plt.ion()
         plt.clf() # Fresh plots
         self.figasqdistlin.add_subplot(111)
-        binvector = np.linspace(-80, 80, 161)
-        #binvector = np.linspace(-10000, 10000, 801)
+        if not np.any((asqsafetylevels > -80 and asqsafetylevels < 80)):
+            if not np.any((asqsafetylevels > -1500 and asqsafetylevels < 1500)):
+                binvector = np.linspace(-10000, 10000, 161)
+                lbl = "Airspace Quality Safety Level - Wide range - Logarithmic scale"
+            else:
+                binvector = np.linspace(-1500, 1500, 161)
+                lbl = "Airspace Quality Safety Level - Medium range - Logarithmic scale"
+        else:
+            binvector = np.linspace(-80, 80, 161)
+            lbl = "Airspace Quality Safety Level - Narrow range - Logarithmic scale"
+
         plt.grid(True)
         plt.hist(asqsafetylevels, log=True, bins=binvector, color=self.plotcolor)
         plt.ylabel(r'$f [-]$')
         plt.xlabel(r'$ASQ [-]$')
-        #plt.xlim(-80,80)
-        plt.title("Airspace Quality Safety Level - Narrow range - Logarithmic scale")
+        plt.title(lbl)
 
         figmanager = plt.get_current_fig_manager()
         figmanager.window.showMaximized()
@@ -434,7 +405,7 @@ class MetricsPlot(object):
 
         self.fighist.add_subplot(233)
         drange = geo.qdrdist[:, :, 1][mask].flatten()
-        binvector = np.linspace(0,600,50)
+        binvector = np.linspace(0, 600, 50)
         plt.hist(drange, bins=binvector, color=self.plotcolor)
         plt.xlim(0, 600)
         plt.ylabel(r'$f [-]$')

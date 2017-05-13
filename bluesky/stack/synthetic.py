@@ -21,7 +21,7 @@ class Synthetic():
 
         stackcmd = {"SYN": [ \
                 " SYN: Possible subcommands: HELP, SIMPLE, SIMPLED, DIFG, SUPER,\n" + \
-                "MATRIX, FLOOR, OVERTAKE, WALL, ROW, COLUMN", "txt,[...]", \
+                "MATRIX, FLOOR, OVERTAKE, WALL, ROW, COLUMN, NEARMISS", "txt,[...]", \
                 lambda *args: sim.syn.process(args[0], len(args) - 1, args, sim)\
                 ]}
         stack.append_commands(stackcmd)
@@ -57,7 +57,7 @@ class Synthetic():
         elif command == "HELP":
             return True, ("This is the synthetic traffic scenario module\n" \
                 "Possible subcommands: HELP, SIMPLE, SIMPLED, DIFG, SUPER, SPHERE, " \
-                "MATRIX, FLOOR, OVERTAKE, WALL, ROW, COLUMN")
+                "MATRIX, FLOOR, OVERTAKE, WALL, ROW, COLUMN, NEARMISS")
 
         #create a perpendicular conflict between two aircraft
         elif command == "SIMPLE":
@@ -365,6 +365,36 @@ class Synthetic():
                     return False, 'unknown argument flag'
                 except:
                     return False, commandhelp
+                    
+        elif command == "NEARMISS":
+            commandhelp = "SYN NEARMISS dcpa[NM]"
+            if numargs == 0:
+                return True, commandhelp
+            else:
+                try:
+                    scr.isoalt = 0
+                    originlat = 52.25
+                    originlon = 5.
+                    dist = float(cmdargs[1]) # in NM
+
+                    alt = 20000*ft #ft
+                    spd = 200 #kts
+
+                    lat2, lon2 = geo.qdrpos(originlat, originlon , 0, dist)
+                    cmdstr = "CRE EASTB,NM,%f,%f,90.0,%f,%f" % (lat2, lon2 - 1., alt, spd)
+                    print cmdstr
+                    stack.stack(cmdstr)
+                    
+                    lat2, lon2 = geo.qdrpos(originlat, originlon , 180, dist)
+                    cmdstr = "CRE WESTB,NM,%f,%f,270.0,%f,%f" % (lat2, lon2 + 1., alt, spd)
+                    print cmdstr
+                    stack.stack(cmdstr)
+                    
+                    return True
+                except Exception:
+                    return False, 'ERROR'
+                except:
+                    return False, commandhelp
 
         # create a conflict with several aircraft flying in two columns angled towards each other
         elif command == "COLUMN":
@@ -389,8 +419,9 @@ class Synthetic():
                         hdg = 360-ang*2*i
                         lat, lon = geo.qdrpos(originlat, originlon, hdg, dist)
                         acid = "ANG" + str(i)
-                        stack.stack('CRE %s, %s, %f, %f, %f, %d, %d' % \
-                            (acid, 'CROSS', lat, lon, hdg+180, alt, spd))
+                        cmdstr = 'CRE %s, %s, %f, %f, %f, %d, %d' % \
+                            (acid, 'CROSS', lat, lon, hdg+180, alt, spd)
+                        stack.stack(cmdstr)
                     
                     """                 if synerror:
                         raise Exception()

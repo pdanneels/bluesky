@@ -46,7 +46,7 @@ class MetricsModule(Toolsmodule):
         self.swtoggle = True
 
         self.swplotevolution = False
-        self.logstatsbuffer = None        
+        self.logstatsbuffer = None
         self.logstatsbuffer2 = None
 
         # Time
@@ -83,6 +83,7 @@ class MetricsModule(Toolsmodule):
         self.stats = MetricsStats(self.sim)
 
     def endplots(self):
+        """ Plot and save a bunch at once """
         self.stack.stack("SHOWPLOT ASQ")
         self.stack.stack("SHOWPLOT EVOLUTION")
         self.stack.stack("SHOWPLOT CR")
@@ -115,9 +116,6 @@ class MetricsModule(Toolsmodule):
 
     def showplot(self, plottoshow):
         """ Show plots """
-#        if self.sim.rarea.ntraf <= 0:
-#            print "ERROR: no traffic in RA"
-#            return
 
         if plottoshow == "CR":
             # Plot conflictrates
@@ -135,7 +133,6 @@ class MetricsModule(Toolsmodule):
             # 3D plot of aircraft pairs
             asqsafetylevels, _ = self.asq.calcasq(self.rdot.rdot)
             self.plot.plotasqlindistribution(asqsafetylevels)
-            #self.plot.plotasqlogdistribution(asqsafetylevels)
             self.logstatsbuffer = self.stats._stats(asqsafetylevels)
             return
 
@@ -245,16 +242,16 @@ class MetricsModule(Toolsmodule):
             stats.printstats(self.geodata, self.rdot)
 
         #if (self.swtoggle and rarea.ntraf >= 10):
-        if self.swtoggle and self.sim.simt > 1:
+        if self.swtoggle and self.sim.simt > 2:
 #            mask = np.ones((self.geodata.size, self.geodata.size), dtype=bool)
 #            if np.max(self.geodata.qdrdist[:, :, 1][mask]) <= 5:
-            if self.sim.traf.asas.nconf <= 1:
-                
+            if self.sim.traf.asas.nconf >= 0:
+
                 self.stack.stack("SHOWPLOT ASQ")
-                self.stack.stack("SHOWPLOT HISTOGRAMS")
+                #self.stack.stack("SHOWPLOT HISTOGRAMS")
                 #self.stack.stack("SHOWPLOT DENSITY")
                 #self.stack.stack("SHOWPLOT EVOLUTION")
-                self.stack.stack("SHOWPLOT CR")
+                #self.stack.stack("SHOWPLOT CR")
                 self.stack.stack("SAVEPLOTS")
                 self.swtoggle = False
                 return
